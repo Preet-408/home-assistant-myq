@@ -111,16 +111,24 @@
     },
     "sensor": {
       "battery_backup_state": {
-        "name": "Status der Notstrombatterie"
+        "name": "Status der Notstrombatterie",
+        "state": {
+          "charged": "Geladen"
+        }
       },
       "absolute_cycle_count": {
-        "name": "Gesamtzahl der Zyklen"
+        "name": "Gesamtzahl der Zyklen",
+        "unit_of_measurement": "Zyklen"
       },
       "service_cycle_count": {
-        "name": "Zyklen seit der Wartung"
+        "name": "Zyklen seit der Wartung",
+        "unit_of_measurement": "Zyklen"
       },
       "last_activation_source": {
-        "name": "Letzte Auslösequelle"
+        "name": "Letzte Auslösequelle",
+        "state": {
+          "myq_app": "MyQ-App"
+        }
       }
     },
     "camera": {
@@ -135,6 +143,18 @@
     },
     "camera_image_failed": {
       "message": "Das Standbild der MyQ-Kamera konnte nicht abgerufen werden."
+    },
+    "invalid_auth": {
+      "message": "MyQ hat die gespeicherte Anmeldung abgelehnt. Authentifiziere das Konto erneut."
+    },
+    "cannot_connect": {
+      "message": "Verbindung zu MyQ nicht möglich."
+    },
+    "api_error": {
+      "message": "Unerwarteter MyQ-Fehler. Details findest du in den Protokollen."
+    },
+    "update_failed": {
+      "message": "Die MyQ-Gerätedaten konnten nicht aktualisiert werden."
     }
   },
   "options": {

@@ -111,16 +111,24 @@
     },
     "sensor": {
       "battery_backup_state": {
-        "name": "Stato della batteria di riserva"
+        "name": "Stato della batteria di riserva",
+        "state": {
+          "charged": "Carica"
+        }
       },
       "absolute_cycle_count": {
-        "name": "Numero totale di cicli"
+        "name": "Numero totale di cicli",
+        "unit_of_measurement": "cicli"
       },
       "service_cycle_count": {
-        "name": "Cicli dalla manutenzione"
+        "name": "Cicli dalla manutenzione",
+        "unit_of_measurement": "cicli"
       },
       "last_activation_source": {
-        "name": "Origine dell'ultima attivazione"
+        "name": "Origine dell'ultima attivazione",
+        "state": {
+          "myq_app": "App MyQ"
+        }
       }
     },
     "camera": {
@@ -135,6 +143,18 @@
     },
     "camera_image_failed": {
       "message": "Impossibile recuperare un’immagine dalla telecamera MyQ."
+    },
+    "invalid_auth": {
+      "message": "MyQ ha rifiutato l'accesso salvato. Autentica di nuovo l'account."
+    },
+    "cannot_connect": {
+      "message": "Impossibile connettersi a MyQ."
+    },
+    "api_error": {
+      "message": "Errore MyQ imprevisto. Controlla i log per i dettagli."
+    },
+    "update_failed": {
+      "message": "Impossibile aggiornare i dati dei dispositivi MyQ."
     }
   },
   "options": {

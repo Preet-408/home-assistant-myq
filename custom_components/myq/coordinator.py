@@ -99,7 +99,9 @@ class MyQDataUpdateCoordinator(DataUpdateCoordinator[MyQCoordinatorData]):
             if isinstance(error, MyQRateLimitError):
                 retry_after = max(retry_after, error.retry_after)
             raise UpdateFailed(
-                "Unable to update MyQ garage doors", retry_after=retry_after
+                translation_domain=DOMAIN,
+                translation_key="update_failed",
+                retry_after=retry_after,
             ) from error
         self._failure_retry_interval = DEFAULT_UPDATE_INTERVAL
         self.cameras = {camera.serial_number: camera for camera in devices.standalone_cameras}
