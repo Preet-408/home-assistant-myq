@@ -60,6 +60,8 @@ class MyQDataUpdateCoordinator(DataUpdateCoordinator[MyQCoordinatorData]):
         self._keypad_states: dict[str, KeypadState] = {}
         self._credential_renewals = 0
         self._power_expiry: dict[str, asyncio.TimerHandle] = {}
+        self._power_request: asyncio.Task[KeypadPower] | None = None
+        self._power_closed = False
         self._power_lock = asyncio.Lock()
         self._power_data: dict[str, object] = {}
         self._power_store = Store[dict[str, object]](
@@ -105,6 +107,12 @@ class MyQDataUpdateCoordinator(DataUpdateCoordinator[MyQCoordinatorData]):
         self.async_keypad_changed()
 
     async def async_shutdown(self) -> None:
+        self._power_closed = True
+        if self._power_request is not None:
+            self._power_request.cancel()
+        # Drain any storage write already in progress before releasing the coordinator.
+        async with self._power_lock:
+            pass
         for timer in self._power_expiry.values():
             timer.cancel()
         self._power_expiry.clear()
@@ -124,18 +132,30 @@ class MyQDataUpdateCoordinator(DataUpdateCoordinator[MyQCoordinatorData]):
     async def async_refresh_keypad_power(self, serial: str) -> None:
         """Share explicit refreshes and preserve other cached metadata when updating power."""
         async with self._power_lock:
+            if self._power_closed:
+                raise MyQApiError("Keypad coordinator has shut down")
             camera = self.cameras.get(serial)
             if camera is None or not camera.is_video_keypad:
                 raise MyQApiError("Keypad is no longer present")
             state = self.keypad_state(serial)
             if state.power and 0 <= time.time() - state.power.sampled_at < 60:
                 return
-            power = await self.client.async_get_keypad_power(camera)
+            self._power_request = self.hass.async_create_task(
+                self.client.async_get_keypad_power(camera)
+            )
+            try:
+                power = await self._power_request
+            finally:
+                self._power_request = None
+            if bool(self._power_closed):
+                return
             previous = self._power_data.get(serial)
             metadata = previous.copy() if isinstance(previous, dict) else {}
             metadata["power"] = power.as_dict()
             updated = {**self._power_data, serial: metadata}
             await self._power_store.async_save(updated)
+            if bool(self._power_closed):
+                return
             self._power_data = updated
             self._set_keypad_power(serial, power)
             self.async_keypad_changed()

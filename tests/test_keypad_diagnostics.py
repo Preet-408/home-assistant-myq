@@ -159,3 +159,35 @@ async def test_explicit_power_request_rejects_redirect_or_oversized_body(
     with pytest.raises(MyQApiError, match=message):
         await MyQClient(cast(ClientSession, session), auth).async_get_keypad_power(KEYPAD)
     assert len(session.calls) == 1
+
+
+async def test_shutdown_cancels_active_refresh_and_rejects_queued_refresh(
+    hass: HomeAssistant,
+) -> None:
+    from custom_components.myq.exceptions import MyQApiError
+
+    entry = MockConfigEntry(domain="myq", data={})
+    entry.add_to_hass(hass)
+    entered = asyncio.Event()
+
+    async def slow_read(camera: MyQCamera) -> KeypadPower:
+        entered.set()
+        await asyncio.Event().wait()
+        raise AssertionError
+
+    client = MagicMock()
+    client.async_get_keypad_power = AsyncMock(side_effect=slow_read)
+    coordinator = MyQDataUpdateCoordinator(hass, entry, client)
+    coordinator.cameras = {KEYPAD.serial_number: KEYPAD}
+    coordinator._power_store = MagicMock(async_save=AsyncMock())
+    first = asyncio.create_task(coordinator.async_refresh_keypad_power(KEYPAD.serial_number))
+    await entered.wait()
+    queued = asyncio.create_task(coordinator.async_refresh_keypad_power(KEYPAD.serial_number))
+    await coordinator.async_shutdown()
+    with pytest.raises(asyncio.CancelledError):
+        await first
+    with pytest.raises(MyQApiError, match="shut down"):
+        await queued
+    assert not coordinator._power_expiry
+    coordinator._power_store.async_save.assert_not_awaited()
+    client.async_get_keypad_power.assert_awaited_once()

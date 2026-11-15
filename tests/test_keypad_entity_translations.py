@@ -58,6 +58,12 @@ async def test_localized_keypad_entities_keep_user_names_and_ids(hass: HomeAssis
     serial = keypad.serial_number
     client.async_get_keypad_power = AsyncMock()
     coordinator._set_keypad_power(serial, KeypadPower(time.time(), 71, "FP"))
+    for key in ("session_errors", "startup_time", "active_consumers", "credential_renewals"):
+        entity_id = registry.async_get_entity_id("sensor", DOMAIN, f"{serial}_keypad_{key}")
+        assert entity_id is not None
+        metric = registry.async_get(entity_id)
+        assert metric is not None and metric.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+        assert hass.states.get(entity_id) is None
     original = coordinator._power_expiry[serial]
     coordinator._set_keypad_power(
         serial, KeypadPower(time.time() - POWER_MAX_AGE + 0.05, 71, "LPDS")

@@ -36,6 +36,12 @@ class MyQKeypadSensor(MyQKeypadEntity, SensorEntity):
     def __init__(self, coordinator: MyQDataUpdateCoordinator, keypad: MyQCamera, key: str) -> None:
         super().__init__(coordinator, keypad, key)
         self.key = key
+        self._attr_entity_registry_enabled_default = key not in {
+            "session_errors",
+            "startup_time",
+            "active_consumers",
+            "credential_renewals",
+        }
         if key == "battery":
             self._attr_device_class = SensorDeviceClass.BATTERY
             self._attr_native_unit_of_measurement = PERCENTAGE
