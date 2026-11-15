@@ -373,6 +373,7 @@ class VideoTransport:
         return bytes(report)
 
     def close(self) -> None:
+        """Stop receiver reports and release every allocated UDP channel."""
         if self._report_task is not None:
             self._report_task.cancel()
             self._report_task = None

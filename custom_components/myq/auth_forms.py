@@ -8,6 +8,8 @@ from urllib.parse import urljoin, urlsplit
 
 @dataclass(frozen=True, slots=True)
 class ParsedForm:
+    """Successful form controls and the unambiguous credential or verification fields."""
+
     action: str
     fields: dict[str, str]
     email_field: str | None

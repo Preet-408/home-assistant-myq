@@ -1,6 +1,5 @@
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -22,6 +21,8 @@ type ExistsFn = Callable[[GarageDoor], bool]
 
 @dataclass(frozen=True, kw_only=True)
 class MyQBinarySensorEntityDescription(BinarySensorEntityDescription):
+    """Select a door flag and the devices that expose it."""
+
     is_on_fn: IsOnFn
     exists_fn: ExistsFn
 
@@ -64,6 +65,7 @@ async def async_setup_entry(
     entry: MyQConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
+    """Register door flags supported by the discovered devices."""
     del hass
     coordinator = entry.runtime_data.coordinator
     async_add_entities(
@@ -75,6 +77,8 @@ async def async_setup_entry(
 
 
 class MyQBinarySensor(MyQEntity, BinarySensorEntity):
+    """Expose a discovered door flag without additional cloud requests."""
+
     entity_description: MyQBinarySensorEntityDescription
 
     def __init__(
@@ -89,13 +93,15 @@ class MyQBinarySensor(MyQEntity, BinarySensorEntity):
 
     @property
     def is_on(self) -> bool | None:
+        """Read the current flag from the coordinator discovery result."""
         door = self.door
         if door is None:
             return None
         return self.entity_description.is_on_fn(door)
 
     @property
-    def extra_state_attributes(self) -> Mapping[str, Any] | None:
+    def extra_state_attributes(self) -> dict[str, tuple[str, ...]] | None:
+        """Attach reported fault codes only to the active-fault entity."""
         door = self.door
         if (
             self.entity_description.key != "active_fault"

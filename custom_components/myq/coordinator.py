@@ -35,6 +35,8 @@ class _PendingCommand:
 
 
 class MyQDataUpdateCoordinator(DataUpdateCoordinator[MyQCoordinatorData]):
+    """Share device discovery and bounded command-follow-up polling across entities."""
+
     def __init__(
         self,
         hass: HomeAssistant,
