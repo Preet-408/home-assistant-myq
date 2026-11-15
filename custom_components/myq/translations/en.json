@@ -111,16 +111,24 @@
     },
     "sensor": {
       "battery_backup_state": {
-        "name": "Battery backup state"
+        "name": "Battery backup state",
+        "state": {
+          "charged": "Charged"
+        }
       },
       "absolute_cycle_count": {
-        "name": "Absolute cycle count"
+        "name": "Absolute cycle count",
+        "unit_of_measurement": "cycles"
       },
       "service_cycle_count": {
-        "name": "Service cycle count"
+        "name": "Service cycle count",
+        "unit_of_measurement": "cycles"
       },
       "last_activation_source": {
-        "name": "Last activation source"
+        "name": "Last activation source",
+        "state": {
+          "myq_app": "MyQ app"
+        }
       }
     },
     "camera": {
@@ -135,6 +143,18 @@
     },
     "camera_image_failed": {
       "message": "The MyQ camera snapshot could not be retrieved."
+    },
+    "invalid_auth": {
+      "message": "MyQ rejected the saved sign-in. Reauthenticate the account."
+    },
+    "cannot_connect": {
+      "message": "Unable to connect to MyQ."
+    },
+    "api_error": {
+      "message": "Unexpected MyQ error. Check the logs for details."
+    },
+    "update_failed": {
+      "message": "Unable to update MyQ devices."
     }
   },
   "options": {

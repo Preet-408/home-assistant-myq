@@ -111,16 +111,24 @@
     },
     "sensor": {
       "battery_backup_state": {
-        "name": "Status noodstroomaccu"
+        "name": "Status noodstroomaccu",
+        "state": {
+          "charged": "Opgeladen"
+        }
       },
       "absolute_cycle_count": {
-        "name": "Totaal aantal cycli"
+        "name": "Totaal aantal cycli",
+        "unit_of_measurement": "cycli"
       },
       "service_cycle_count": {
-        "name": "Cycli sinds onderhoud"
+        "name": "Cycli sinds onderhoud",
+        "unit_of_measurement": "cycli"
       },
       "last_activation_source": {
-        "name": "Bron van laatste activering"
+        "name": "Bron van laatste activering",
+        "state": {
+          "myq_app": "MyQ-app"
+        }
       }
     },
     "camera": {
@@ -135,6 +143,18 @@
     },
     "camera_image_failed": {
       "message": "De momentopname van de MyQ-camera kon niet worden opgehaald."
+    },
+    "invalid_auth": {
+      "message": "MyQ heeft de opgeslagen aanmelding geweigerd. Authenticeer het account opnieuw."
+    },
+    "cannot_connect": {
+      "message": "Kan geen verbinding maken met MyQ."
+    },
+    "api_error": {
+      "message": "Onverwachte MyQ-fout. Bekijk de logboeken voor details."
+    },
+    "update_failed": {
+      "message": "De MyQ-apparaatgegevens konden niet worden bijgewerkt."
     }
   },
   "options": {

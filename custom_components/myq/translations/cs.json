@@ -111,16 +111,24 @@
     },
     "sensor": {
       "battery_backup_state": {
-        "name": "Stav záložní baterie"
+        "name": "Stav záložní baterie",
+        "state": {
+          "charged": "Nabito"
+        }
       },
       "absolute_cycle_count": {
-        "name": "Celkový počet cyklů"
+        "name": "Celkový počet cyklů",
+        "unit_of_measurement": "cykly"
       },
       "service_cycle_count": {
-        "name": "Cykly od servisu"
+        "name": "Cykly od servisu",
+        "unit_of_measurement": "cykly"
       },
       "last_activation_source": {
-        "name": "Zdroj poslední aktivace"
+        "name": "Zdroj poslední aktivace",
+        "state": {
+          "myq_app": "Aplikace MyQ"
+        }
       }
     },
     "camera": {
@@ -135,6 +143,18 @@
     },
     "camera_image_failed": {
       "message": "Snímek z kamery MyQ se nepodařilo načíst."
+    },
+    "invalid_auth": {
+      "message": "MyQ odmítlo uložené přihlášení. Znovu ověřte účet."
+    },
+    "cannot_connect": {
+      "message": "Nelze se připojit k MyQ."
+    },
+    "api_error": {
+      "message": "Neočekávaná chyba MyQ. Podrobnosti najdete v protokolech."
+    },
+    "update_failed": {
+      "message": "Údaje zařízení MyQ se nepodařilo aktualizovat."
     }
   },
   "options": {

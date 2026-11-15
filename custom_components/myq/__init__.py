@@ -32,6 +32,7 @@ PLATFORMS: tuple[Platform, ...] = (
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: MyQConfigEntry) -> bool:
+    """Validate the account, register platforms and persist refreshed credentials."""
     data = cast(MyQConfigData, entry.data)
 
     @callback
@@ -84,4 +85,5 @@ async def async_setup_entry(hass: HomeAssistant, entry: MyQConfigEntry) -> bool:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: MyQConfigEntry) -> bool:
+    """Unload all entity platforms belonging to the account."""
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
