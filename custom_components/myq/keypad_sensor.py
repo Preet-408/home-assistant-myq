@@ -31,6 +31,8 @@ ENUM_OPTIONS = {
 
 
 class MyQKeypadSensor(MyQKeypadEntity, SensorEntity):
+    """Expose cached power readings and local session diagnostics."""
+
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator: MyQDataUpdateCoordinator, keypad: MyQCamera, key: str) -> None:
@@ -57,6 +59,7 @@ class MyQKeypadSensor(MyQKeypadEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
+        """Require a fresh sample for battery and reported power readings."""
         if self.key in {"battery", "power_state"}:
             power = self.keypad_state.power
             return super().available and power is not None and power.fresh
@@ -64,6 +67,7 @@ class MyQKeypadSensor(MyQKeypadEntity, SensorEntity):
 
     @property
     def native_value(self) -> StateType | datetime:
+        """Read the selected measurement from the shared keypad cache."""
         state = self.keypad_state
         power = state.power
         match self.key:
@@ -89,6 +93,7 @@ class MyQKeypadSensor(MyQKeypadEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, str | float | None] | None:
+        """Describe the last transport path or recorded session failure."""
         if self.key == "transport":
             return {"last_transport": self.keypad_state.last_transport}
         if self.key == "session_errors":

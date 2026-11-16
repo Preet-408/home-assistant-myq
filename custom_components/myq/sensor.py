@@ -19,6 +19,8 @@ type ExistsFn = Callable[[GarageDoor], bool]
 
 @dataclass(frozen=True, kw_only=True)
 class MyQSensorEntityDescription(SensorEntityDescription):
+    """Select a reported diagnostic and the doors that provide it."""
+
     value_fn: ValueFn
     exists_fn: ExistsFn
 
@@ -35,7 +37,6 @@ SENSOR_DESCRIPTIONS: tuple[MyQSensorEntityDescription, ...] = (
         key="absolute_cycle_count",
         translation_key="absolute_cycle_count",
         entity_category=EntityCategory.DIAGNOSTIC,
-        native_unit_of_measurement="cycles",
         state_class=SensorStateClass.TOTAL_INCREASING,
         value_fn=lambda door: door.absolute_cycle_count,
         exists_fn=lambda door: door.absolute_cycle_count is not None,
@@ -44,7 +45,6 @@ SENSOR_DESCRIPTIONS: tuple[MyQSensorEntityDescription, ...] = (
         key="service_cycle_count",
         translation_key="service_cycle_count",
         entity_category=EntityCategory.DIAGNOSTIC,
-        native_unit_of_measurement="cycles",
         state_class=SensorStateClass.TOTAL_INCREASING,
         value_fn=lambda door: door.service_cycle_count,
         exists_fn=lambda door: door.service_cycle_count is not None,
@@ -64,6 +64,7 @@ async def async_setup_entry(
     entry: MyQConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
+    """Register only diagnostics supplied by discovered doors."""
     del hass
     coordinator = entry.runtime_data.coordinator
     async_add_entities(
@@ -80,6 +81,8 @@ async def async_setup_entry(
 
 
 class MyQSensor(MyQEntity, SensorEntity):
+    """Expose a diagnostic from the shared door discovery result."""
+
     entity_description: MyQSensorEntityDescription
 
     def __init__(
@@ -94,6 +97,7 @@ class MyQSensor(MyQEntity, SensorEntity):
 
     @property
     def native_value(self) -> StateType:
+        """Keep API values stable while presentation uses entity translations."""
         door = self.door
         if door is None:
             return None

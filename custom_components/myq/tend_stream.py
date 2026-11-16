@@ -51,6 +51,18 @@ class _Viewer:
         self.put(b"")
         self.ended = True
 
+    def feed(self, frame: bytes, types: set[int], *, sps: bytes | None, pps: bytes | None) -> None:
+        """Start a consumer at a keyframe with the current decoder parameters."""
+        if not self.ready:
+            if 5 not in types or sps is None or pps is None:
+                return
+            if 7 not in types:
+                self.put(sps)
+            if 8 not in types:
+                self.put(pps)
+            self.ready = True
+        self.put(frame)
+
 
 class TendLiveStream:
     """Expose one TC camera session to multiple local stream consumers."""
@@ -177,15 +189,7 @@ class TendLiveStream:
             self._report("first_frame", round(time.monotonic() - self._first_frame_started, 3))
             self._first_frame_started = None
         for viewer in self._viewers:
-            if not viewer.ready:
-                if 5 not in types or self._sps is None or self._pps is None:
-                    continue
-                if 7 not in types:
-                    viewer.put(self._sps)
-                if 8 not in types:
-                    viewer.put(self._pps)
-                viewer.ready = True
-            viewer.put(frame)
+            viewer.feed(frame, types, sps=self._sps, pps=self._pps)
 
     async def _handle_client(self, request: web.Request) -> web.StreamResponse:
         viewer: _Viewer | None = None
@@ -221,16 +225,17 @@ class TendLiveStream:
                 raise web.HTTPServiceUnavailable() from error
         finally:
             if viewer is not None:
-                self._viewers.discard(viewer)
-                self._report("consumers", len(self._viewers))
-                if not self._viewers and not self._closed:
-                    delay = _IDLE_SECONDS
-                    if self._session is not None and self._session.ended:
-                        delay = 0
-                    self._idle_timer = asyncio.get_running_loop().call_later(
-                        delay, self._start_idle_close
-                    )
+                self._unsubscribe(viewer)
         return response
+
+    def _unsubscribe(self, viewer: _Viewer) -> None:
+        self._viewers.discard(viewer)
+        self._report("consumers", len(self._viewers))
+        if not self._viewers and not self._closed:
+            delay = _IDLE_SECONDS
+            if self._session is not None and self._session.ended:
+                delay = 0
+            self._idle_timer = asyncio.get_running_loop().call_later(delay, self._start_idle_close)
 
     def _start_idle_close(self) -> None:
         self._idle_timer = None

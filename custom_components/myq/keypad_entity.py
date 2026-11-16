@@ -9,6 +9,8 @@ from .models import MyQCamera
 
 
 class MyQKeypadEntity(CoordinatorEntity[MyQDataUpdateCoordinator]):
+    """Share device identity and cached state across keypad entities."""
+
     _attr_has_entity_name = True
 
     def __init__(self, coordinator: MyQDataUpdateCoordinator, keypad: MyQCamera, key: str) -> None:
@@ -22,10 +24,12 @@ class MyQKeypadEntity(CoordinatorEntity[MyQDataUpdateCoordinator]):
 
     @property
     def keypad_state(self) -> KeypadState:
+        """Return this device's cached power and session diagnostics."""
         return self.coordinator.keypad_state(self._serial)
 
     @property
     def available(self) -> bool:
+        """Require successful discovery and continued presence of the keypad."""
         return super().available and any(
             k.serial_number == self._serial for k in self.coordinator.keypads
         )

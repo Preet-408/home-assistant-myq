@@ -117,16 +117,24 @@
     },
     "sensor": {
       "battery_backup_state": {
-        "name": "备用电池状态"
+        "name": "备用电池状态",
+        "state": {
+          "charged": "已充满"
+        }
       },
       "absolute_cycle_count": {
-        "name": "总运行次数"
+        "name": "总运行次数",
+        "unit_of_measurement": "次"
       },
       "service_cycle_count": {
-        "name": "保养后运行次数"
+        "name": "保养后运行次数",
+        "unit_of_measurement": "次"
       },
       "last_activation_source": {
-        "name": "上次触发来源"
+        "name": "上次触发来源",
+        "state": {
+          "myq_app": "MyQ 应用"
+        }
       },
       "keypad_battery": {
         "name": "电池"
@@ -189,6 +197,18 @@
     },
     "camera_image_failed": {
       "message": "无法获取 MyQ 摄像头的快照。"
+    },
+    "invalid_auth": {
+      "message": "MyQ 拒绝了已保存的登录信息。请重新验证该账户。"
+    },
+    "cannot_connect": {
+      "message": "无法连接到 MyQ。"
+    },
+    "api_error": {
+      "message": "MyQ 发生意外错误。请查看日志了解详情。"
+    },
+    "update_failed": {
+      "message": "无法更新 MyQ 设备数据。"
     },
     "keypad_power_refresh_failed": {
       "message": "无法刷新键盘的电池和电源状态。"

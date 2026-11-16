@@ -86,10 +86,12 @@ class MyQCameraEntity(CoordinatorEntity[MyQDataUpdateCoordinator], Camera):
 
     @property
     def model(self) -> str | None:
+        """Read the model from the current camera discovery result."""
         return self.camera.device_model if self.camera is not None else None
 
     @property
     def extra_state_attributes(self) -> dict[str, str] | None:
+        """Expose the non-identifying serial prefix used to select video support."""
         camera = self.camera
         if camera is None or camera.serial_prefix is None:
             return None
@@ -97,6 +99,7 @@ class MyQCameraEntity(CoordinatorEntity[MyQDataUpdateCoordinator], Camera):
 
     @property
     def available(self) -> bool:
+        """Require both the camera and its owning opener to remain available."""
         camera = self.camera
         if not super().available or camera is None or camera.online is False:
             return False

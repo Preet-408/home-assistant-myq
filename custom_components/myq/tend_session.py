@@ -39,6 +39,7 @@ class TendSession:
 
     @property
     def media_path(self) -> str:
+        """Return the observed video transport path, if one is established."""
         return self._transport.media_path if self._transport is not None else "unknown"
 
     @classmethod

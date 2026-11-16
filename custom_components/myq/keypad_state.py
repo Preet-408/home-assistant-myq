@@ -12,12 +12,15 @@ POWER_MAX_AGE = 12 * 60 * 60
 
 @dataclass(frozen=True, slots=True)
 class KeypadPower:
+    """A reported battery level and power mode with its retrieval timestamp."""
+
     sampled_at: float
     battery_percent: float | None
     sleep_mode: str | None
 
     @classmethod
     def from_device(cls, device: Mapping[str, object]) -> KeypadPower:
+        """Validate a device power report and timestamp its retrieval."""
         status = device.get("status")
         power = status.get("pwr") if isinstance(status, dict) else None
         if not isinstance(power, dict):
@@ -40,6 +43,7 @@ class KeypadPower:
 
     @classmethod
     def from_storage(cls, data: Mapping[str, object]) -> KeypadPower | None:
+        """Restore a valid cached sample while preserving its original age."""
         sampled = data.get("sampled_at")
         if (
             not isinstance(sampled, int | float)
@@ -63,9 +67,11 @@ class KeypadPower:
 
     @property
     def fresh(self) -> bool:
+        """Return whether the sample remains within the cache lifetime."""
         return 0 <= time.time() - self.sampled_at < POWER_MAX_AGE
 
     def as_dict(self) -> dict[str, float | str | None]:
+        """Serialize the sample for the private power cache."""
         return asdict(self)
 
 
@@ -87,6 +93,7 @@ class KeypadState:
     failure_at: float | None = None
 
     def stream_event(self, event: str, value: str | float | int | None) -> None:
+        """Apply a shared-session notification to the cached diagnostics."""
         if event == "start":
             self.phase = "connecting"
             self.transport = "unknown"

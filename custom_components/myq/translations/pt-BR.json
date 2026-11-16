@@ -117,16 +117,24 @@
     },
     "sensor": {
       "battery_backup_state": {
-        "name": "Estado da bateria reserva"
+        "name": "Estado da bateria reserva",
+        "state": {
+          "charged": "Carregada"
+        }
       },
       "absolute_cycle_count": {
-        "name": "Total de ciclos"
+        "name": "Total de ciclos",
+        "unit_of_measurement": "ciclos"
       },
       "service_cycle_count": {
-        "name": "Ciclos desde a manutenção"
+        "name": "Ciclos desde a manutenção",
+        "unit_of_measurement": "ciclos"
       },
       "last_activation_source": {
-        "name": "Origem da última ativação"
+        "name": "Origem da última ativação",
+        "state": {
+          "myq_app": "Aplicativo MyQ"
+        }
       },
       "keypad_battery": {
         "name": "Bateria"
@@ -189,6 +197,18 @@
     },
     "camera_image_failed": {
       "message": "Não foi possível obter uma imagem da câmera MyQ."
+    },
+    "invalid_auth": {
+      "message": "O MyQ recusou o login salvo. Autentique a conta novamente."
+    },
+    "cannot_connect": {
+      "message": "Não foi possível conectar ao MyQ."
+    },
+    "api_error": {
+      "message": "Erro inesperado do MyQ. Verifique os logs para obter detalhes."
+    },
+    "update_failed": {
+      "message": "Não foi possível atualizar os dados dos dispositivos MyQ."
     },
     "keypad_power_refresh_failed": {
       "message": "Não foi possível atualizar o estado da bateria e da alimentação do teclado."

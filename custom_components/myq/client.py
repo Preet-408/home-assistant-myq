@@ -30,6 +30,8 @@ type HeadersFn = Callable[[str], dict[str, str]]
 
 
 class MyQClient:
+    """Access account devices and camera metadata with shared OAuth and cooldowns."""
+
     def __init__(self, session: ClientSession, auth: MyQAuth) -> None:
         self._session = session
         self._auth = auth
@@ -95,9 +97,11 @@ class MyQClient:
         )
 
     async def async_open_door(self, door: GarageDoor) -> None:
+        """Request opening for the door in its owning account."""
         await self._async_command(door, "open")
 
     async def async_close_door(self, door: GarageDoor) -> None:
+        """Request closing for the door in its owning account."""
         await self._async_command(door, "close")
 
     async def async_get_camera_image(self, camera: MyQCamera) -> bytes:

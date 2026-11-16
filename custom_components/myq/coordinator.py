@@ -39,6 +39,8 @@ class _PendingCommand:
 
 
 class MyQDataUpdateCoordinator(DataUpdateCoordinator[MyQCoordinatorData]):
+    """Share device discovery and bounded command-follow-up polling across entities."""
+
     def __init__(
         self,
         hass: HomeAssistant,
@@ -70,14 +72,17 @@ class MyQDataUpdateCoordinator(DataUpdateCoordinator[MyQCoordinatorData]):
 
     @property
     def keypads(self) -> tuple[MyQCamera, ...]:
+        """Return independently discovered Video Keypads."""
         return tuple(camera for camera in self.cameras.values() if camera.is_video_keypad)
 
     def keypad_state(self, serial: str) -> KeypadState:
+        """Return shared local diagnostics for one keypad."""
         if serial not in self._keypad_states:
             self._keypad_states[serial] = KeypadState(credential_renewals=self._credential_renewals)
         return self._keypad_states[serial]
 
     async def async_load_keypad_state(self) -> None:
+        """Restore cached power samples with their original expiry times."""
         stored = await self._power_store.async_load()
         if not isinstance(stored, dict):
             return
@@ -107,6 +112,7 @@ class MyQDataUpdateCoordinator(DataUpdateCoordinator[MyQCoordinatorData]):
         self.async_keypad_changed()
 
     async def async_shutdown(self) -> None:
+        """Drain power refreshes and release all coordinator timers."""
         self._power_closed = True
         if self._power_request is not None:
             self._power_request.cancel()
@@ -120,10 +126,12 @@ class MyQDataUpdateCoordinator(DataUpdateCoordinator[MyQCoordinatorData]):
 
     @callback
     def async_keypad_changed(self) -> None:
+        """Publish cached diagnostic changes without requesting device data."""
         self.async_update_listeners()
 
     @callback
     def async_keypad_token_refreshed(self) -> None:
+        """Record an account credential renewal in each keypad's diagnostics."""
         self._credential_renewals += 1
         for state in self._keypad_states.values():
             state.credential_renewals = self._credential_renewals
@@ -206,7 +214,9 @@ class MyQDataUpdateCoordinator(DataUpdateCoordinator[MyQCoordinatorData]):
             if isinstance(error, MyQRateLimitError):
                 retry_after = max(retry_after, error.retry_after)
             raise UpdateFailed(
-                "Unable to update MyQ garage doors", retry_after=retry_after
+                translation_domain=DOMAIN,
+                translation_key="update_failed",
+                retry_after=retry_after,
             ) from error
         self._failure_retry_interval = DEFAULT_UPDATE_INTERVAL
         self.cameras = {camera.serial_number: camera for camera in devices.standalone_cameras}

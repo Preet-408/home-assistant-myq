@@ -17,6 +17,7 @@ async def async_setup_entry(
     entry: MyQConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
+    """Add an explicit power-refresh control for each standalone Video Keypad."""
     del hass
     coordinator = entry.runtime_data.coordinator
     async_add_entities(
@@ -25,7 +26,10 @@ async def async_setup_entry(
 
 
 class MyQKeypadButton(MyQKeypadEntity, ButtonEntity):
+    """Request battery and power metadata only when pressed."""
+
     async def async_press(self) -> None:
+        """Refresh cached power metadata and translate request failures."""
         try:
             await self.coordinator.async_refresh_keypad_power(self._serial)
         except (MyQError, ClientError, TimeoutError) as error:
