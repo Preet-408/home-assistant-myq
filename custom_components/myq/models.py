@@ -39,6 +39,11 @@ class MyQCamera:
     name: str | None = None
 
     @property
+    def is_video_keypad(self) -> bool:
+        """Identify Video Keypads by their reported device model."""
+        return self.device_model == "vkp-camera"
+
+    @property
     def serial_prefix(self) -> str | None:
         """Return only the non-identifying camera serial prefix, when present."""
         prefix, separator, _ = self.serial_number.partition("-")

@@ -102,6 +102,12 @@
       },
       "active_fault": {
         "name": "Активна несправність"
+      },
+      "keypad_session_problem": {
+        "name": "Проблема із сеансом"
+      },
+      "keypad_streaming": {
+        "name": "Трансляція відео"
       }
     },
     "cover": {
@@ -129,11 +135,59 @@
         "state": {
           "myq_app": "Застосунок MyQ"
         }
+      },
+      "keypad_active_consumers": {
+        "name": "Активні отримувачі відео"
+      },
+      "keypad_battery": {
+        "name": "Батарея"
+      },
+      "keypad_credential_renewals": {
+        "name": "Оновлення облікових даних"
+      },
+      "keypad_power_sample_time": {
+        "name": "Час вимірювання заряду батареї"
+      },
+      "keypad_power_state": {
+        "name": "Повідомлений режим живлення",
+        "state": {
+          "fp": "Повна потужність",
+          "lpds": "Глибокий сон"
+        }
+      },
+      "keypad_session_errors": {
+        "name": "Помилки сеансу"
+      },
+      "keypad_session_state": {
+        "name": "Стан сеансу",
+        "state": {
+          "connecting": "Підключення",
+          "error": "Помилка",
+          "idle": "Бездіяльність",
+          "streaming": "Трансляція"
+        }
+      },
+      "keypad_startup_time": {
+        "name": "Тривалість останнього запуску"
+      },
+      "keypad_transport": {
+        "name": "Спосіб передавання відео",
+        "state": {
+          "cloud_relay": "Хмарна ретрансляція",
+          "idle": "Бездіяльність",
+          "lan": "Локальна мережа",
+          "p2p": "Пряме з'єднання"
+        }
       }
     },
     "camera": {
       "camera": {
         "name": "Камера"
+      }
+    },
+    "button": {
+      "keypad_refresh_power": {
+        "name": "Оновити стан батареї та живлення"
       }
     }
   },
@@ -155,6 +209,9 @@
     },
     "update_failed": {
       "message": "Не вдалося оновити пристрої MyQ."
+    },
+    "keypad_power_refresh_failed": {
+      "message": "Не вдалося оновити стан батареї та живлення кодової панелі."
     }
   },
   "options": {

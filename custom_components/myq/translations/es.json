@@ -102,6 +102,12 @@
       },
       "active_fault": {
         "name": "Fallo activo"
+      },
+      "keypad_streaming": {
+        "name": "Transmisión de vídeo"
+      },
+      "keypad_session_problem": {
+        "name": "Problema de sesión"
       }
     },
     "cover": {
@@ -129,11 +135,59 @@
         "state": {
           "myq_app": "Aplicación MyQ"
         }
+      },
+      "keypad_battery": {
+        "name": "Batería"
+      },
+      "keypad_power_state": {
+        "name": "Estado de alimentación informado",
+        "state": {
+          "fp": "Potencia completa",
+          "lpds": "Suspensión profunda"
+        }
+      },
+      "keypad_power_sample_time": {
+        "name": "Hora de la medición de la batería"
+      },
+      "keypad_session_state": {
+        "name": "Estado de la sesión",
+        "state": {
+          "idle": "Inactivo",
+          "connecting": "Conectando",
+          "streaming": "Transmitiendo",
+          "error": "Error"
+        }
+      },
+      "keypad_session_errors": {
+        "name": "Errores de sesión"
+      },
+      "keypad_startup_time": {
+        "name": "Duración del último inicio"
+      },
+      "keypad_active_consumers": {
+        "name": "Receptores de vídeo activos"
+      },
+      "keypad_credential_renewals": {
+        "name": "Renovaciones de credenciales"
+      },
+      "keypad_transport": {
+        "name": "Transporte de vídeo",
+        "state": {
+          "idle": "Inactivo",
+          "lan": "Red local",
+          "p2p": "Conexión directa",
+          "cloud_relay": "Retransmisión en la nube"
+        }
       }
     },
     "camera": {
       "camera": {
         "name": "Cámara"
+      }
+    },
+    "button": {
+      "keypad_refresh_power": {
+        "name": "Actualizar batería y alimentación"
       }
     }
   },
@@ -155,6 +209,9 @@
     },
     "update_failed": {
       "message": "No se pudieron actualizar los datos de los dispositivos MyQ."
+    },
+    "keypad_power_refresh_failed": {
+      "message": "No se pudo actualizar el estado de la batería y la alimentación del teclado."
     }
   },
   "options": {

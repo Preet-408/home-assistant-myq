@@ -9,6 +9,7 @@ from homeassistant.helpers.typing import StateType
 
 from .coordinator import MyQDataUpdateCoordinator
 from .entity import MyQEntity
+from .keypad_sensor import KEYPAD_SENSORS, MyQKeypadSensor
 from .models import GarageDoor
 from .runtime import MyQConfigEntry
 
@@ -66,6 +67,11 @@ async def async_setup_entry(
     """Register only diagnostics supplied by discovered doors."""
     del hass
     coordinator = entry.runtime_data.coordinator
+    async_add_entities(
+        MyQKeypadSensor(coordinator, keypad, key)
+        for keypad in coordinator.keypads
+        for key in KEYPAD_SENSORS
+    )
     async_add_entities(
         MyQSensor(coordinator, door, description)
         for door in coordinator.data.values()

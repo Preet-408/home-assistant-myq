@@ -102,6 +102,12 @@
       },
       "active_fault": {
         "name": "Aktiv feil"
+      },
+      "keypad_session_problem": {
+        "name": "Øktproblem"
+      },
+      "keypad_streaming": {
+        "name": "Videostrømming"
       }
     },
     "cover": {
@@ -129,11 +135,59 @@
         "state": {
           "myq_app": "MyQ-app"
         }
+      },
+      "keypad_active_consumers": {
+        "name": "Aktive videomottakere"
+      },
+      "keypad_battery": {
+        "name": "Batteri"
+      },
+      "keypad_credential_renewals": {
+        "name": "Fornyelser av påloggingsinformasjon"
+      },
+      "keypad_power_sample_time": {
+        "name": "Tidspunkt for batterimåling"
+      },
+      "keypad_power_state": {
+        "name": "Rapportert strømtilstand",
+        "state": {
+          "fp": "Full effekt",
+          "lpds": "Dyp dvale"
+        }
+      },
+      "keypad_session_errors": {
+        "name": "Øktfeil"
+      },
+      "keypad_session_state": {
+        "name": "Øktstatus",
+        "state": {
+          "connecting": "Kobler til",
+          "error": "Feil",
+          "idle": "Inaktiv",
+          "streaming": "Strømmer"
+        }
+      },
+      "keypad_startup_time": {
+        "name": "Siste oppstartsvarighet"
+      },
+      "keypad_transport": {
+        "name": "Videooverføring",
+        "state": {
+          "cloud_relay": "Skyrelé",
+          "idle": "Inaktiv",
+          "lan": "Lokalnett",
+          "p2p": "Direkteforbindelse"
+        }
       }
     },
     "camera": {
       "camera": {
         "name": "Kamera"
+      }
+    },
+    "button": {
+      "keypad_refresh_power": {
+        "name": "Oppdater batteri- og strømstatus"
       }
     }
   },
@@ -155,6 +209,9 @@
     },
     "update_failed": {
       "message": "Kan ikke oppdatere MyQ-enheter."
+    },
+    "keypad_power_refresh_failed": {
+      "message": "Kunne ikke oppdatere batteri- og strømstatusen til kodepanelet."
     }
   },
   "options": {

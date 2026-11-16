@@ -102,6 +102,12 @@
       },
       "active_fault": {
         "name": "Aktiivinen vika"
+      },
+      "keypad_session_problem": {
+        "name": "Istunnon ongelma"
+      },
+      "keypad_streaming": {
+        "name": "Videon suoratoisto"
       }
     },
     "cover": {
@@ -129,11 +135,59 @@
         "state": {
           "myq_app": "MyQ-sovellus"
         }
+      },
+      "keypad_active_consumers": {
+        "name": "Aktiiviset videovastaanottajat"
+      },
+      "keypad_battery": {
+        "name": "Akku"
+      },
+      "keypad_credential_renewals": {
+        "name": "Kirjautumistietojen uusimiset"
+      },
+      "keypad_power_sample_time": {
+        "name": "Akun mittausaika"
+      },
+      "keypad_power_state": {
+        "name": "Ilmoitettu virtatila",
+        "state": {
+          "fp": "Täysi teho",
+          "lpds": "Syvä lepotila"
+        }
+      },
+      "keypad_session_errors": {
+        "name": "Istuntovirheet"
+      },
+      "keypad_session_state": {
+        "name": "Istunnon tila",
+        "state": {
+          "connecting": "Yhdistetään",
+          "error": "Virhe",
+          "idle": "Toimeton",
+          "streaming": "Suoratoisto käynnissä"
+        }
+      },
+      "keypad_startup_time": {
+        "name": "Viimeisimmän käynnistyksen kesto"
+      },
+      "keypad_transport": {
+        "name": "Videon siirtotapa",
+        "state": {
+          "cloud_relay": "Pilvivälitys",
+          "idle": "Toimeton",
+          "lan": "Lähiverkko",
+          "p2p": "Vertaisyhteys"
+        }
       }
     },
     "camera": {
       "camera": {
         "name": "Kamera"
+      }
+    },
+    "button": {
+      "keypad_refresh_power": {
+        "name": "Päivitä akun ja virransyötön tila"
       }
     }
   },
@@ -155,6 +209,9 @@
     },
     "update_failed": {
       "message": "MyQ-laitteiden päivittäminen epäonnistui."
+    },
+    "keypad_power_refresh_failed": {
+      "message": "Näppäimistön akun ja virransyötön tilan päivittäminen epäonnistui."
     }
   },
   "options": {

@@ -50,10 +50,3 @@ ruff format --check .
 mypy custom_components/myq tests
 pytest
 ```
-
-Keep changes focused and include tests for new behavior. Never include account
-credentials, verification codes, OAuth tokens, device serial numbers, or raw
-service responses in issues, fixtures, commits, or logs.
-
-Tests must mock door commands. Do not use a physical garage door for automated
-or repeatable test runs.

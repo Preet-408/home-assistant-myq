@@ -102,6 +102,12 @@
       },
       "active_fault": {
         "name": "Aktiv fejl"
+      },
+      "keypad_streaming": {
+        "name": "Streaming"
+      },
+      "keypad_session_problem": {
+        "name": "Sessionsproblem"
       }
     },
     "cover": {
@@ -129,11 +135,59 @@
         "state": {
           "myq_app": "MyQ-app"
         }
+      },
+      "keypad_battery": {
+        "name": "Batteri"
+      },
+      "keypad_power_state": {
+        "name": "Rapporteret strømtilstand",
+        "state": {
+          "fp": "Fuld effekt",
+          "lpds": "Dyb dvale"
+        }
+      },
+      "keypad_power_sample_time": {
+        "name": "Tidspunkt for batterimåling"
+      },
+      "keypad_session_state": {
+        "name": "Sessionsstatus",
+        "state": {
+          "idle": "Inaktiv",
+          "connecting": "Opretter forbindelse",
+          "streaming": "Streamer",
+          "error": "Fejl"
+        }
+      },
+      "keypad_session_errors": {
+        "name": "Sessionsfejl"
+      },
+      "keypad_startup_time": {
+        "name": "Seneste opstartstid"
+      },
+      "keypad_active_consumers": {
+        "name": "Aktive videomodtagere"
+      },
+      "keypad_credential_renewals": {
+        "name": "Fornyelser af loginoplysninger"
+      },
+      "keypad_transport": {
+        "name": "Videotransport",
+        "state": {
+          "idle": "Inaktiv",
+          "lan": "Lokalt netværk",
+          "p2p": "Direkte forbindelse",
+          "cloud_relay": "Via skyen"
+        }
       }
     },
     "camera": {
       "camera": {
         "name": "Kamera"
+      }
+    },
+    "button": {
+      "keypad_refresh_power": {
+        "name": "Opdater batteri- og strømstatus"
       }
     }
   },
@@ -155,6 +209,9 @@
     },
     "update_failed": {
       "message": "MyQ-enhederne kunne ikke opdateres."
+    },
+    "keypad_power_refresh_failed": {
+      "message": "Batteri- og strømstatus for tastaturet kunne ikke opdateres."
     }
   },
   "options": {
