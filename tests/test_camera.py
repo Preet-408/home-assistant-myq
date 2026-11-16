@@ -6,7 +6,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from aiohttp import ClientConnectionError
 from homeassistant.components.camera import CameraEntityFeature, async_get_image
+from homeassistant.components.camera.const import StreamType
+from homeassistant.components.camera.helper import get_camera_from_entity_id
 from homeassistant.components.camera.prefs import DynamicStreamSettings
+from homeassistant.components.camera.webrtc import (
+    CameraWebRTCProvider,
+    async_register_webrtc_provider,
+)
 from homeassistant.components.stream import Stream
 from homeassistant.components.stream.core import STREAM_SETTINGS_NON_LL_HLS
 from homeassistant.const import STATE_UNAVAILABLE
@@ -14,6 +20,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.myq.camera import SNAPSHOT_FRAME_INTERVAL, MyQCameraEntity
@@ -282,6 +289,81 @@ async def test_setup_adds_camera_only_for_doors_with_cameras(hass: HomeAssistant
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
+
+
+@pytest.mark.parametrize(("camera_online", "opener_online"), [(False, True), (True, False)])
+async def test_webrtc_is_restored_when_camera_becomes_available(
+    hass: HomeAssistant,
+    camera_online: bool,
+    opener_online: bool,
+) -> None:
+    assert await async_setup_component(hass, "camera", {})
+    provider = MagicMock(spec=CameraWebRTCProvider)
+    provider.async_is_supported.return_value = True
+    async_register_webrtc_provider(hass, provider)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=EMAIL,
+        title=EMAIL,
+        data={
+            CONF_EMAIL: EMAIL,
+            CONF_MFA_METHOD: MFA_METHOD_EMAIL,
+            CONF_TOKENS: {
+                "access_token": "access",
+                "refresh_token": "refresh",
+                "expires_at": 9876543210.0,
+            },
+        },
+    )
+    entry.add_to_hass(hass)
+    assert DOOR.camera is not None
+    offline_door = replace(
+        DOOR, online=opener_online, camera=replace(DOOR.camera, online=camera_online)
+    )
+    client = MagicMock()
+    client.async_get_devices = AsyncMock(return_value=MyQDevices((offline_door,)))
+
+    with (
+        patch("custom_components.myq.MyQClient", return_value=client),
+        patch("custom_components.myq.camera.TendLiveStream") as stream_class,
+    ):
+        live = stream_class.return_value
+        live.source_url = AsyncMock(return_value="http://127.0.0.1:1234/test.h264")
+        live.close = AsyncMock()
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        try:
+            camera_id = er.async_get(hass).async_get_entity_id("camera", DOMAIN, "door-1_camera")
+            assert camera_id is not None
+            camera = get_camera_from_entity_id(hass, camera_id)
+            assert hass.states.is_state(camera_id, STATE_UNAVAILABLE)
+            assert camera.camera_capabilities.frontend_stream_types == {StreamType.HLS}
+            provider.async_is_supported.assert_not_called()
+
+            runtime = cast(MyQRuntimeData, entry.runtime_data)
+
+            def source_url() -> str:
+                runtime.coordinator.async_keypad_changed()
+                return "http://127.0.0.1:1234/test.h264"
+
+            live.source_url.side_effect = source_url
+            client.async_get_devices.return_value = MyQDevices((DOOR,))
+            await runtime.coordinator.async_refresh()
+            await hass.async_block_till_done()
+
+            assert hass.states.is_state(camera_id, "idle")
+            assert camera.camera_capabilities.frontend_stream_types == {
+                StreamType.HLS,
+                StreamType.WEB_RTC,
+            }
+            provider.async_is_supported.assert_called_once_with("http://127.0.0.1:1234/test.h264")
+
+            await runtime.coordinator.async_refresh()
+            await hass.async_block_till_done()
+            provider.async_is_supported.assert_called_once()
+        finally:
+            assert await hass.config_entries.async_unload(entry.entry_id)
+            await hass.async_block_till_done()
 
 
 def _entity(door: GarageDoor) -> tuple[MyQCameraEntity, MagicMock]:

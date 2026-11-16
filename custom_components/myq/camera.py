@@ -6,7 +6,7 @@ import time
 from aiohttp import ClientError
 from homeassistant.components.camera import Camera, CameraEntityFeature
 from homeassistant.components.camera.prefs import DynamicStreamSettings
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -73,6 +73,7 @@ class MyQCameraEntity(CoordinatorEntity[MyQDataUpdateCoordinator], Camera):
         self._image: bytes | None = None
         self._captured_at = 0.0
         self._live_stream: TendLiveStream | None = None
+        self._was_available: bool = self.available
         if camera.serial_prefix == "TC":
             self._attr_supported_features = CameraEntityFeature.STREAM
             self.stream_options = {"use_wallclock_as_timestamps": True}
@@ -108,6 +109,16 @@ class MyQCameraEntity(CoordinatorEntity[MyQDataUpdateCoordinator], Camera):
             door = self.coordinator.data.get(self._opener_serial)
             return door is not None and door.online is not False
         return True
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Refresh stream providers when the camera becomes available."""
+        super()._handle_coordinator_update()
+        available = self.available
+        became_available = available and not self._was_available
+        self._was_available = available
+        if became_available and (entry := self.coordinator.config_entry) is not None:
+            entry.async_create_task(self.hass, self.async_refresh_providers())
 
     async def async_camera_image(
         self, width: int | None = None, height: int | None = None
