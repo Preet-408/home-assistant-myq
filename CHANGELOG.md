@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v0.2.14 (2026-11-16)
+
+Improve localization and integration maintainability
+
+- Add Ukrainian, Finnish and Norwegian Bokmål, with 16 complete translations.
+- Localize errors, sensor states and cycle units.
+- Simplify camera transport and stream handling, and enforce source checks.
+- Close sign-in sessions when configuration flows are dismissed.
+- Define contribution scope and review requirements.
+
+
 ## v0.2.13 (2026-11-12)
 
 Fix live video selection for attached cameras
