@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v0.2.15 (2026-11-16)
+
+Add Video Keypad diagnostics and manual power refresh
+
+- Expose cached battery, power mode and shared video session diagnostics.
+- Add manual power refresh with persistent caching, expiry and shutdown cleanup.
+- Complete diagnostic translations across all 16 supported languages.
+- Add regression coverage for diagnostics, session lifecycle and localization.
+- Simplify contribution and security documentation.
+
+
 ## v0.2.14 (2026-11-16)
 
 Improve localization and integration maintainability
