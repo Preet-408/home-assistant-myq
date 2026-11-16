@@ -6,6 +6,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from aiohttp import ClientConnectionError
 from homeassistant.components.camera import CameraEntityFeature, async_get_image
+from homeassistant.components.camera.prefs import DynamicStreamSettings
+from homeassistant.components.stream import Stream
+from homeassistant.components.stream.core import STREAM_SETTINGS_NON_LL_HLS
 from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
@@ -90,6 +93,34 @@ async def test_live_stream_starts_fresh_after_entity_is_re_added() -> None:
 
         assert await entity.stream_source() == "http://127.0.0.1:1234/test.h264"
     assert stream_class.call_count == 2
+
+
+async def test_removing_preloaded_stream_stops_worker_without_changing_preferences(
+    hass: HomeAssistant,
+) -> None:
+    entity, _ = _entity(DOOR)
+    settings = DynamicStreamSettings(preload_stream=True)
+    stream = Stream(
+        hass,
+        "http://127.0.0.1:1234/test.h264",
+        {},
+        STREAM_SETTINGS_NON_LL_HLS,
+        settings,
+    )
+    with patch.object(stream, "_run_worker", stream._thread_quit.wait):
+        await stream.start()
+    worker = stream._thread
+    assert worker is not None and worker.is_alive()
+    entity.stream = stream
+
+    try:
+        await entity.async_will_remove_from_hass()
+
+        assert not worker.is_alive()
+        assert settings.preload_stream is True
+    finally:
+        stream._thread_quit.set()
+        await hass.async_add_executor_job(worker.join, 1)
 
 
 async def test_concurrent_snapshot_requests_share_one_capture() -> None:

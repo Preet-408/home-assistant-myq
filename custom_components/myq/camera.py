@@ -5,6 +5,7 @@ import time
 
 from aiohttp import ClientError
 from homeassistant.components.camera import Camera, CameraEntityFeature
+from homeassistant.components.camera.prefs import DynamicStreamSettings
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -178,6 +179,7 @@ class MyQCameraEntity(CoordinatorEntity[MyQDataUpdateCoordinator], Camera):
         finally:
             self._live_stream = None
             if self.stream is not None:
+                self.stream.dynamic_stream_settings = DynamicStreamSettings()
                 await self.stream.stop()
                 self.stream = None
             await super().async_will_remove_from_hass()
