@@ -178,6 +178,9 @@
           "p2p": "Direktanslutning",
           "cloud_relay": "Molnrelä"
         }
+      },
+      "keypad_snapshot_time": {
+        "name": "Tidpunkt för ögonblicksbild"
       }
     },
     "camera": {

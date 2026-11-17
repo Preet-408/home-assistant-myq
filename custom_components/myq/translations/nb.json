@@ -178,6 +178,9 @@
           "lan": "Lokalnett",
           "p2p": "Direkteforbindelse"
         }
+      },
+      "keypad_snapshot_time": {
+        "name": "Tidspunkt for øyeblikksbilde"
       }
     },
     "camera": {

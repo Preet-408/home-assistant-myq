@@ -178,6 +178,9 @@
           "p2p": "点对点",
           "cloud_relay": "云中继"
         }
+      },
+      "keypad_snapshot_time": {
+        "name": "快照时间"
       }
     },
     "camera": {

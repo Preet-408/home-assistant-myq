@@ -178,6 +178,9 @@
           "p2p": "Directe verbinding",
           "cloud_relay": "Cloudrelay"
         }
+      },
+      "keypad_snapshot_time": {
+        "name": "Tijdstip van momentopname"
       }
     },
     "camera": {

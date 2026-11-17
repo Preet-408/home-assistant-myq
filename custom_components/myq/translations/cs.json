@@ -178,6 +178,9 @@
           "p2p": "Přímé spojení",
           "cloud_relay": "Přenos přes cloud"
         }
+      },
+      "keypad_snapshot_time": {
+        "name": "Čas pořízení snímku"
       }
     },
     "camera": {

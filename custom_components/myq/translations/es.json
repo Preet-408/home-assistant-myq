@@ -178,6 +178,9 @@
           "p2p": "Conexión directa",
           "cloud_relay": "Retransmisión en la nube"
         }
+      },
+      "keypad_snapshot_time": {
+        "name": "Hora de la captura"
       }
     },
     "camera": {

@@ -178,6 +178,9 @@
           "p2p": "Direktverbindung",
           "cloud_relay": "Cloud-Relay"
         }
+      },
+      "keypad_snapshot_time": {
+        "name": "Zeitpunkt des Standbilds"
       }
     },
     "camera": {

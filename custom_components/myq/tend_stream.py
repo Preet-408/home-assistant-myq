@@ -72,11 +72,16 @@ class TendLiveStream:
         target_supplier: CameraTargetSupplier,
         token_supplier: Callable[[], Awaitable[str]],
         *,
+        idle_seconds: float | None = None,
+        on_snapshot: Callable[[bytes], None] | None = None,
         on_diagnostic: Callable[[str, str | int | float | None], None] | None = None,
         prepare_on_disconnect: bool = False,
         lan_only: bool = False,
         fallback_target_supplier: CameraTargetSupplier | None = None,
     ) -> None:
+        self._idle_seconds = idle_seconds
+        self._on_snapshot = on_snapshot
+        self._snapshot_frame: bytes | None = None
         self._on_diagnostic = on_diagnostic
         self._last_media_path = "unknown"
         self._first_frame_started: float | None = None
@@ -98,6 +103,11 @@ class TendLiveStream:
         self._idle_task: asyncio.Task[None] | None = None
         self._shutdown_task: asyncio.Task[None] | None = None
         self._closed = False
+
+    @property
+    def snapshot_frame(self) -> bytes | None:
+        """Return the last complete frame retained for a preview-enabled camera."""
+        return self._snapshot_frame
 
     async def source_url(self) -> str:
         """Start a loopback-only server with an unguessable stream path."""
@@ -232,8 +242,22 @@ class TendLiveStream:
         if 5 in types and self._sps and self._pps and self._first_frame_started is not None:
             self._report("first_frame", round(time.monotonic() - self._first_frame_started, 3))
             self._first_frame_started = None
+        self._capture_snapshot(frame, types)
         for viewer in self._viewers:
             viewer.feed(frame, types, sps=self._sps, pps=self._pps)
+
+    def _capture_snapshot(self, frame: bytes, types: set[int]) -> None:
+        if self._on_snapshot is None or 5 not in types or not self._sps or not self._pps:
+            return
+        snapshot = (
+            (self._sps if 7 not in types else b"") + (self._pps if 8 not in types else b"") + frame
+        )
+        if len(snapshot) <= 3_000_000:
+            self._snapshot_frame = snapshot
+            try:
+                self._on_snapshot(snapshot)
+            except Exception as error:
+                _LOGGER.debug("Camera preview callback failed: %s", type(error).__name__)
 
     async def _handle_client(self, request: web.Request) -> web.StreamResponse:
         viewer: _Viewer | None = None
@@ -281,7 +305,7 @@ class TendLiveStream:
         self._viewers.discard(viewer)
         self._report("consumers", len(self._viewers))
         if not self._viewers and not self._closed:
-            delay = _IDLE_SECONDS
+            delay = _IDLE_SECONDS if self._idle_seconds is None else self._idle_seconds
             if self._session is not None and self._session.ended and self._target_task is None:
                 delay = 0
             self._idle_timer = asyncio.get_running_loop().call_later(delay, self._start_idle_close)

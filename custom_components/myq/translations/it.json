@@ -178,6 +178,9 @@
           "p2p": "Connessione diretta",
           "cloud_relay": "Relay cloud"
         }
+      },
+      "keypad_snapshot_time": {
+        "name": "Ora dell’istantanea"
       }
     },
     "camera": {

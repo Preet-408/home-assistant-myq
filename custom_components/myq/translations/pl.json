@@ -178,6 +178,9 @@
           "p2p": "Połączenie bezpośrednie",
           "cloud_relay": "Przekaźnik w chmurze"
         }
+      },
+      "keypad_snapshot_time": {
+        "name": "Czas wykonania migawki"
       }
     },
     "camera": {

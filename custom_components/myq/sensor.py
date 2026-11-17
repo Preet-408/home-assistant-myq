@@ -1,16 +1,24 @@
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 
-from homeassistant.components.sensor import SensorEntity, SensorEntityDescription, SensorStateClass
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
+    SensorStateClass,
+)
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.typing import StateType
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import MyQDataUpdateCoordinator
-from .entity import MyQEntity
+from .entity import MyQEntity, myq_device_info
 from .keypad_sensor import KEYPAD_SENSORS, MyQKeypadSensor
-from .models import GarageDoor
+from .models import GarageDoor, MyQCamera
 from .runtime import MyQConfigEntry
 
 type ValueFn = Callable[[GarageDoor], StateType]
@@ -67,6 +75,7 @@ async def async_setup_entry(
     """Register only diagnostics supplied by discovered doors."""
     del hass
     coordinator = entry.runtime_data.coordinator
+    async_add_entities(KeypadSnapshotTime(coordinator, camera) for camera in coordinator.keypads)
     async_add_entities(
         MyQKeypadSensor(coordinator, keypad, key)
         for keypad in coordinator.keypads
@@ -102,3 +111,42 @@ class MyQSensor(MyQEntity, SensorEntity):
         if door is None:
             return None
         return self.entity_description.value_fn(door)
+
+
+class KeypadSnapshotTime(CoordinatorEntity[MyQDataUpdateCoordinator], SensorEntity):
+    """Time of the last locally cached Video Keypad preview."""
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_translation_key = "keypad_snapshot_time"
+
+    def __init__(self, coordinator: MyQDataUpdateCoordinator, camera: MyQCamera) -> None:
+        super().__init__(coordinator)
+        self._serial = camera.serial_number
+        self._attr_unique_id = f"{self._serial}_keypad_snapshot_time"
+        self._attr_device_info = myq_device_info(
+            self._serial, name=camera.name, model=camera.device_model
+        )
+
+    async def async_added_to_hass(self) -> None:
+        """Listen for preview updates without polling the keypad."""
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass, self.coordinator.snapshot_signal(self._serial), self.async_write_ha_state
+            )
+        )
+
+    async def async_update(self) -> None:
+        """The preview time is already cached."""
+
+    @property
+    def native_value(self) -> datetime | None:
+        """Return the capture time published with the cached JPEG."""
+        return self.coordinator.keypad_snapshot_times.get(self._serial)
+
+    @property
+    def available(self) -> bool:
+        """Require the keypad to remain present in successful discovery data."""
+        return super().available and self._serial in self.coordinator.cameras

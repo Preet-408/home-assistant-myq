@@ -178,6 +178,9 @@
           "p2p": "Peer-to-peer",
           "cloud_relay": "Cloud relay"
         }
+      },
+      "keypad_snapshot_time": {
+        "name": "Snapshot time"
       }
     },
     "camera": {
