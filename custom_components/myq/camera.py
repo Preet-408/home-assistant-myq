@@ -6,6 +6,7 @@ import time
 from aiohttp import ClientError
 from homeassistant.components.camera import Camera, CameraEntityFeature
 from homeassistant.components.camera.prefs import DynamicStreamSettings
+from homeassistant.components.stream import Stream
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -143,6 +144,14 @@ class MyQCameraEntity(CoordinatorEntity[MyQDataUpdateCoordinator], Camera):
             self._captured_at = time.monotonic()
             return self._image
 
+    async def async_create_stream(self) -> Stream | None:
+        """Prepare battery camera playback before starting its stream reader."""
+        stream = await super().async_create_stream()
+        camera = self.camera
+        if stream and camera and camera.is_video_keypad and self._live_stream:
+            await self._live_stream.prepare_for_playback()
+        return stream
+
     async def stream_source(self) -> str | None:
         """Provide a local H.264 source for TC cameras."""
         camera = self.camera
@@ -160,7 +169,8 @@ class MyQCameraEntity(CoordinatorEntity[MyQDataUpdateCoordinator], Camera):
                 )
                 if self.coordinator.config_entry
                 else False,
-                **({"on_diagnostic": self._runtime_diagnostic} if camera.is_video_keypad else {}),
+                on_diagnostic=self._runtime_diagnostic if camera.is_video_keypad else None,
+                prepare_on_disconnect=camera.is_video_keypad,
             )
         return await self._live_stream.source_url()
 
@@ -169,8 +179,16 @@ class MyQCameraEntity(CoordinatorEntity[MyQDataUpdateCoordinator], Camera):
         self.coordinator.async_keypad_changed()
 
     async def _async_stream_target(self) -> TendCameraTarget:
+        camera = self.camera
+        if camera is None:
+            raise MyQApiError("Camera is no longer available")
+        alias = None
+        if camera.is_video_keypad:
+            alias = await self.coordinator.client.async_prepare_keypad(camera)
         if self._opener_serial is not None:
             return TendCameraTarget(opener_serial=self._opener_serial)
+        if alias is not None:
+            return TendCameraTarget(destination=alias)
         return await self._async_camera_target()
 
     async def _async_camera_target(self) -> TendCameraTarget:

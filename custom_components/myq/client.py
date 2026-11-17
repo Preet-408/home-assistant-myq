@@ -22,6 +22,7 @@ from .const import (
 )
 from .exceptions import MyQApiError, MyQAuthenticationError
 from .keypad_state import KeypadPower
+from .keypad_wake import async_wake_keypad
 from .models import GarageDoor, MyQAccount, MyQCamera, MyQDevices
 from .oauth import MyQAuth
 from .request_limits import RequestCooldown
@@ -43,6 +44,28 @@ class MyQClient:
     async def async_access_token(self) -> str:
         """Return the current OAuth token for Tend camera signaling."""
         return await self._auth.async_access_token()
+
+    async def async_prepare_keypad(self, camera: MyQCamera) -> str | None:
+        """Prepare only a battery keypad, retaining this client's refresh ownership."""
+        if not camera.is_video_keypad:
+            return None
+
+        async def request(method: str, url: str, body: dict[str, object] | None) -> bytes:
+            return await self._async_request(
+                method,
+                url,
+                _metadata_headers,
+                json_body=body,
+                allow_redirects=False,
+                max_body_bytes=1_024_000,
+            )
+
+        device = await async_wake_keypad(camera.tend_device_id, request)
+        if "id" in device and device["id"] != camera.tend_device_id:
+            raise MyQApiError("Tend returned a different camera identity")
+        if "id" in device and "alias" in device:
+            return _camera_alias(camera, device)
+        return None
 
     async def async_get_accounts(self) -> tuple[MyQAccount, ...]:
         """Refresh account membership less frequently than device state."""
@@ -142,13 +165,7 @@ class MyQClient:
     async def async_get_camera_alias(self, camera: MyQCamera) -> str:
         """Resolve one camera's signaling destination from its Tend device ID."""
         payload = await self._async_camera_metadata(camera)
-        alias = payload.get("alias")
-        if not isinstance(alias, str):
-            raise MyQApiError("Tend returned a camera without a signaling alias")
-        owner, separator, device = alias.partition(":")
-        if not owner or not separator or not device:
-            raise MyQApiError("Tend returned an invalid signaling alias")
-        return alias
+        return _camera_alias(camera, payload)
 
     async def _async_get_account_devices(
         self,
@@ -218,6 +235,7 @@ class MyQClient:
         url: str,
         headers: HeadersFn | None = None,
         *,
+        json_body: dict[str, object] | None = None,
         allow_redirects: bool | None = None,
         max_body_bytes: int | None = None,
     ) -> bytes:
@@ -232,6 +250,7 @@ class MyQClient:
                 method,
                 url,
                 headers=request_headers,
+                json=json_body,
                 allow_redirects=allow_redirects,
             )
         async with request as response:
@@ -250,6 +269,18 @@ class MyQClient:
             if response.status >= (300 if allow_redirects is False else 400):
                 raise MyQApiError(f"MyQ returned HTTP {response.status}")
             return body
+
+
+def _camera_alias(camera: MyQCamera, payload: dict[str, object]) -> str:
+    if payload.get("id") != camera.tend_device_id:
+        raise MyQApiError("Tend returned a different camera identity")
+    alias = payload.get("alias")
+    if not isinstance(alias, str):
+        raise MyQApiError("Tend returned a camera without a signaling alias")
+    owner, separator, device = alias.partition(":")
+    if not owner or not separator or not device:
+        raise MyQApiError("Tend returned an invalid signaling alias")
+    return alias
 
 
 def _online(raw_state: object) -> bool | None:
