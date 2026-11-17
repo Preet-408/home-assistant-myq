@@ -178,6 +178,9 @@
           "lan": "Lähiverkko",
           "p2p": "Vertaisyhteys"
         }
+      },
+      "keypad_snapshot_time": {
+        "name": "Tilannekuvan aika"
       }
     },
     "camera": {
