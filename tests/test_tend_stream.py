@@ -237,6 +237,219 @@ def test_queue_end_survives_backpressure() -> None:
     assert b"late" not in queued
 
 
+async def test_prepare_runs_once_for_concurrent_consumers_and_again_for_reconnect(
+    open_session: AsyncMock,
+) -> None:
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def prepare() -> TendCameraTarget:
+        entered.set()
+        await release.wait()
+        return TendCameraTarget(destination="alias:mac1")
+
+    preparation = AsyncMock(side_effect=prepare)
+    stream = TendLiveStream(preparation, AsyncMock(return_value="token"))
+    try:
+        first = asyncio.create_task(stream._subscribe())
+        await entered.wait()
+        second = asyncio.create_task(stream._subscribe())
+        await asyncio.sleep(0)
+        preparation.assert_awaited_once()
+        open_session.assert_not_awaited()
+        release.set()
+        viewers = await asyncio.gather(first, second)
+        assert len(set(viewers)) == 2
+        preparation.assert_awaited_once()
+        open_session.assert_awaited_once()
+        assert stream._session is not None
+        stream._session.ended = True
+        await stream._subscribe()
+        assert preparation.await_count == 2
+        assert open_session.await_count == 2
+    finally:
+        await stream.close()
+
+
+async def test_preparation_is_passive_until_a_consumer_subscribes(
+    socket_enabled: None,
+    open_session: AsyncMock,
+) -> None:
+    del socket_enabled
+    prepare = AsyncMock()
+    token = AsyncMock(return_value="token")
+    stream = TendLiveStream(prepare, token)
+    try:
+        assert (await stream.source_url()).startswith("http://127.0.0.1:")
+        prepare.assert_not_awaited()
+        token.assert_not_awaited()
+        open_session.assert_not_awaited()
+    finally:
+        await stream.close()
+
+
+async def test_close_cancels_pending_wake_before_token_or_camera_session(
+    open_session: AsyncMock,
+) -> None:
+    started = asyncio.Event()
+    stopped = asyncio.Event()
+
+    async def prepare() -> TendCameraTarget:
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            stopped.set()
+        return TendCameraTarget(destination="alias:mac1")
+
+    token = AsyncMock(return_value="token")
+    stream = TendLiveStream(prepare, token)
+    subscribe = asyncio.create_task(stream._subscribe())
+    await started.wait()
+    await asyncio.wait_for(stream.close(), 1)
+    with pytest.raises(asyncio.CancelledError):
+        await subscribe
+    assert stopped.is_set()
+    assert stream._target_task is None
+    token.assert_not_awaited()
+    open_session.assert_not_awaited()
+
+
+async def test_cancelled_subscriber_allows_next_consumer_to_prepare(
+    open_session: AsyncMock,
+) -> None:
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def prepare() -> TendCameraTarget:
+        started.set()
+        await release.wait()
+        return TendCameraTarget(destination="alias:mac1")
+
+    preparation = AsyncMock(side_effect=prepare)
+    stream = TendLiveStream(preparation, AsyncMock(return_value="token"))
+    first = asyncio.create_task(stream._subscribe())
+    await started.wait()
+    first.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await first
+    assert stream._target_task is None
+    open_session.assert_not_awaited()
+    try:
+        release.set()
+        await stream._subscribe()
+        assert preparation.await_count == 2
+        open_session.assert_awaited_once()
+    finally:
+        await stream.close()
+
+
+async def test_failed_preparation_is_sanitized_and_does_not_open_video(
+    open_session: AsyncMock,
+) -> None:
+    from custom_components.myq.exceptions import MyQApiError
+
+    token = AsyncMock(return_value="token")
+    stream = TendLiveStream(AsyncMock(side_effect=MyQApiError("private")), token)
+    try:
+        with pytest.raises(TendStreamError, match="prepare for live video") as error:
+            await stream._subscribe()
+        assert "private" not in str(error.value)
+        token.assert_not_awaited()
+        open_session.assert_not_awaited()
+    finally:
+        await stream.close()
+
+
+async def test_close_during_old_session_cleanup_prevents_reconnect_wake(
+    open_session: AsyncMock,
+) -> None:
+    cleanup_started = asyncio.Event()
+    release_cleanup = asyncio.Event()
+
+    async def cleanup() -> None:
+        cleanup_started.set()
+        await release_cleanup.wait()
+
+    prepare = AsyncMock()
+    token = AsyncMock(return_value="token")
+    stream = TendLiveStream(prepare, token)
+    stream._session = MagicMock(ended=True, close=AsyncMock(side_effect=cleanup))
+    subscribe = asyncio.create_task(stream._subscribe())
+    await cleanup_started.wait()
+    closing = asyncio.create_task(stream.close())
+    await asyncio.sleep(0)
+    assert stream._closed
+    release_cleanup.set()
+    with pytest.raises(TendStreamError, match="closed"):
+        await asyncio.wait_for(subscribe, 1)
+    await asyncio.wait_for(closing, 1)
+    prepare.assert_not_awaited()
+    token.assert_not_awaited()
+    open_session.assert_not_awaited()
+
+
+async def test_keypad_lifecycle_reports_session_measures_and_cancellation(
+    live: TendLiveStream, open_session: AsyncMock
+) -> None:
+    from dataclasses import replace
+
+    from custom_components.myq.keypad_state import KeypadState
+
+    state = KeypadState()
+    one_viewer = asyncio.Event()
+
+    def observe(event: str, value: str | float | int | None) -> None:
+        state.stream_event(event, value)
+        if event == "consumers" and value == 1:
+            one_viewer.set()
+
+    live._on_diagnostic = observe
+    open_session.return_value.media_path = "unknown"
+    url = await live.source_url()
+    assert replace(state).phase == "idle" and state.active_consumers == 0
+    async with ClientSession() as client:
+        first, second = await asyncio.gather(client.get(url), client.get(url))
+        assert replace(state).phase == "connecting" and state.active_consumers == 2
+        open_session.assert_awaited_once()
+        live._on_frame(PFRAME)
+        assert replace(state).first_frame_seconds is None
+        open_session.return_value.media_path = "lan"
+        live._on_frame(SPS + PPS + IDR)
+        assert replace(state).session_active and replace(state).first_frame_seconds is not None
+        assert replace(state).transport == "lan" and state.last_transport == "lan"
+        one_viewer.clear()
+        first.close()
+        await asyncio.wait_for(one_viewer.wait(), 1)
+        assert replace(state).active_consumers == 1 and state.session_active
+        live._on_frame(b"")
+        live._on_frame(b"")
+        assert replace(state).session_errors == 1 and state.last_failure == "VideoEnded"
+        assert replace(state).phase == "error" and not replace(state).session_active
+        second.close()
+    await live.close()
+
+
+async def test_diagnostic_callback_failure_preserves_media_and_idle_cleanup(
+    live: TendLiveStream, open_session: AsyncMock
+) -> None:
+    def fail(event: str, value: object) -> None:
+        raise RuntimeError("synthetic diagnostic failure")
+
+    closed = asyncio.Event()
+    open_session.return_value.close.side_effect = closed.set
+    live._on_diagnostic = fail
+    open_session.return_value.media_path = "lan"
+    with patch("custom_components.myq.tend_stream._IDLE_SECONDS", 0):
+        async with ClientSession() as client:
+            response = await client.get(await live.source_url())
+            live._on_frame(SPS + PPS + IDR)
+            assert await response.content.readexactly(len(SPS + PPS + IDR)) == SPS + PPS + IDR
+            response.close()
+        await asyncio.wait_for(closed.wait(), 1)
+    open_session.return_value.close.assert_awaited_once()
+
+
 async def test_lan_only_applies_to_every_new_session(open_session: AsyncMock) -> None:
     stream = TendLiveStream(
         AsyncMock(return_value=TendCameraTarget(opener_serial="door-1")),
@@ -278,3 +491,53 @@ async def test_shared_session_passes_lazy_alias_lookup_without_calling_it(
         fallback.assert_not_awaited()
     finally:
         await stream.close()
+
+
+async def test_ha_playback_waits_for_wake_before_opening_http_source(
+    live: TendLiveStream, open_session: AsyncMock
+) -> None:
+    from homeassistant.components.camera import Camera
+
+    from custom_components.myq.camera import MyQCameraEntity
+    from custom_components.myq.models import MyQCamera
+
+    camera = MyQCamera("TC-0001-12345678", True, "vkp-camera")
+    entity = MyQCameraEntity(MagicMock(cameras={camera.serial_number: camera}), camera)
+    entity._live_stream = live
+    url = await live.source_url()
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def slow_prepare() -> TendCameraTarget:
+        entered.set()
+        await release.wait()
+        return TendCameraTarget(destination="test:camera")
+
+    live._target_supplier = slow_prepare
+    with patch.object(Camera, "async_create_stream", new_callable=AsyncMock):
+        playback = asyncio.create_task(entity.async_create_stream())
+        await entered.wait()
+        assert not playback.done()
+        release.set()
+        await playback
+    async with ClientSession() as http, http.get(url) as response:
+        assert response.status == 200
+    open_session.assert_awaited_once()
+
+
+async def test_preparation_error_preserves_cooldown_and_category(live: TendLiveStream) -> None:
+    from custom_components.myq.exceptions import (
+        MyQAuthenticationError,
+        MyQRateLimitError,
+        MyQWakeTimeoutError,
+    )
+
+    for failure, expected in [
+        (MyQRateLimitError(90), "retry after 90s"),
+        (MyQAuthenticationError("private"), "MyQAuthenticationError"),
+        (OSError("private"), "OSError"),
+        (MyQWakeTimeoutError("private"), "MyQWakeTimeoutError"),
+    ]:
+        live._target_supplier = AsyncMock(side_effect=failure)
+        with pytest.raises(TendStreamError, match=expected) as result:
+            await live._subscribe()
+        assert "private" not in str(result.value)

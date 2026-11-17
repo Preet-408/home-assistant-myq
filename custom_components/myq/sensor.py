@@ -17,6 +17,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import MyQDataUpdateCoordinator
 from .entity import MyQEntity, myq_device_info
+from .keypad_sensor import KEYPAD_SENSORS, MyQKeypadSensor
 from .models import GarageDoor, MyQCamera
 from .runtime import MyQConfigEntry
 
@@ -26,6 +27,8 @@ type ExistsFn = Callable[[GarageDoor], bool]
 
 @dataclass(frozen=True, kw_only=True)
 class MyQSensorEntityDescription(SensorEntityDescription):
+    """Select a reported diagnostic and the doors that provide it."""
+
     value_fn: ValueFn
     exists_fn: ExistsFn
 
@@ -42,7 +45,6 @@ SENSOR_DESCRIPTIONS: tuple[MyQSensorEntityDescription, ...] = (
         key="absolute_cycle_count",
         translation_key="absolute_cycle_count",
         entity_category=EntityCategory.DIAGNOSTIC,
-        native_unit_of_measurement="cycles",
         state_class=SensorStateClass.TOTAL_INCREASING,
         value_fn=lambda door: door.absolute_cycle_count,
         exists_fn=lambda door: door.absolute_cycle_count is not None,
@@ -51,7 +53,6 @@ SENSOR_DESCRIPTIONS: tuple[MyQSensorEntityDescription, ...] = (
         key="service_cycle_count",
         translation_key="service_cycle_count",
         entity_category=EntityCategory.DIAGNOSTIC,
-        native_unit_of_measurement="cycles",
         state_class=SensorStateClass.TOTAL_INCREASING,
         value_fn=lambda door: door.service_cycle_count,
         exists_fn=lambda door: door.service_cycle_count is not None,
@@ -71,12 +72,14 @@ async def async_setup_entry(
     entry: MyQConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
+    """Register only diagnostics supplied by discovered doors."""
     del hass
     coordinator = entry.runtime_data.coordinator
+    async_add_entities(KeypadSnapshotTime(coordinator, camera) for camera in coordinator.keypads)
     async_add_entities(
-        KeypadSnapshotTime(coordinator, camera)
-        for camera in coordinator.cameras.values()
-        if camera.is_video_keypad
+        MyQKeypadSensor(coordinator, keypad, key)
+        for keypad in coordinator.keypads
+        for key in KEYPAD_SENSORS
     )
     async_add_entities(
         MyQSensor(coordinator, door, description)
@@ -87,6 +90,8 @@ async def async_setup_entry(
 
 
 class MyQSensor(MyQEntity, SensorEntity):
+    """Expose a diagnostic from the shared door discovery result."""
+
     entity_description: MyQSensorEntityDescription
 
     def __init__(
@@ -101,6 +106,7 @@ class MyQSensor(MyQEntity, SensorEntity):
 
     @property
     def native_value(self) -> StateType:
+        """Keep API values stable while presentation uses entity translations."""
         door = self.door
         if door is None:
             return None
@@ -124,6 +130,7 @@ class KeypadSnapshotTime(CoordinatorEntity[MyQDataUpdateCoordinator], SensorEnti
         )
 
     async def async_added_to_hass(self) -> None:
+        """Listen for preview updates without polling the keypad."""
         await super().async_added_to_hass()
         self.async_on_remove(
             async_dispatcher_connect(
@@ -136,8 +143,10 @@ class KeypadSnapshotTime(CoordinatorEntity[MyQDataUpdateCoordinator], SensorEnti
 
     @property
     def native_value(self) -> datetime | None:
+        """Return the capture time published with the cached JPEG."""
         return self.coordinator.keypad_snapshot_times.get(self._serial)
 
     @property
     def available(self) -> bool:
+        """Require the keypad to remain present in successful discovery data."""
         return super().available and self._serial in self.coordinator.cameras

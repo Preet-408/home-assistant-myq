@@ -21,6 +21,8 @@ from .const import (
     USER_AGENT,
 )
 from .exceptions import MyQApiError, MyQAuthenticationError
+from .keypad_state import KeypadPower
+from .keypad_wake import async_wake_keypad
 from .models import GarageDoor, MyQAccount, MyQCamera, MyQDevices
 from .oauth import MyQAuth
 from .request_limits import RequestCooldown
@@ -29,6 +31,8 @@ type HeadersFn = Callable[[str], dict[str, str]]
 
 
 class MyQClient:
+    """Access account devices and camera metadata with shared OAuth and cooldowns."""
+
     def __init__(self, session: ClientSession, auth: MyQAuth) -> None:
         self._session = session
         self._auth = auth
@@ -40,6 +44,28 @@ class MyQClient:
     async def async_access_token(self) -> str:
         """Return the current OAuth token for Tend camera signaling."""
         return await self._auth.async_access_token()
+
+    async def async_prepare_keypad(self, camera: MyQCamera) -> str | None:
+        """Prepare only a battery keypad, retaining this client's refresh ownership."""
+        if not camera.is_video_keypad:
+            return None
+
+        async def request(method: str, url: str, body: dict[str, object] | None) -> bytes:
+            return await self._async_request(
+                method,
+                url,
+                _metadata_headers,
+                json_body=body,
+                allow_redirects=False,
+                max_body_bytes=1_024_000,
+            )
+
+        device = await async_wake_keypad(camera.tend_device_id, request)
+        if "id" in device and device["id"] != camera.tend_device_id:
+            raise MyQApiError("Tend returned a different camera identity")
+        if "id" in device and "alias" in device:
+            return _camera_alias(camera, device)
+        return None
 
     async def async_get_accounts(self) -> tuple[MyQAccount, ...]:
         """Refresh account membership less frequently than device state."""
@@ -94,9 +120,11 @@ class MyQClient:
         )
 
     async def async_open_door(self, door: GarageDoor) -> None:
+        """Request opening for the door in its owning account."""
         await self._async_command(door, "open")
 
     async def async_close_door(self, door: GarageDoor) -> None:
+        """Request closing for the door in its owning account."""
         await self._async_command(door, "close")
 
     async def async_get_camera_image(self, camera: MyQCamera) -> bytes:
@@ -110,20 +138,34 @@ class MyQClient:
             raise MyQApiError("Tend returned a camera snapshot that is not a JPEG")
         return image
 
-    async def async_get_camera_alias(self, camera: MyQCamera) -> str:
-        """Resolve one camera's signaling destination from its Tend device ID."""
+    async def _async_camera_metadata(self, camera: MyQCamera) -> dict[str, object]:
+        if not camera.tend_device_id.isdecimal():
+            raise MyQApiError("Invalid camera video identifier")
         payload = await self._async_request_json(
-            "GET", f"{TEND_API_BASE_URL}/devices/{camera.tend_device_id}", _tend_headers
+            "GET",
+            f"{TEND_API_BASE_URL}/devices/{camera.tend_device_id}",
+            _metadata_headers,
+            bounded=True,
         )
         if payload.get("id") != camera.tend_device_id:
             raise MyQApiError("Tend returned a different camera identity")
-        alias = payload.get("alias")
-        if not isinstance(alias, str):
-            raise MyQApiError("Tend returned a camera without a signaling alias")
-        owner, separator, device = alias.partition(":")
-        if not owner or not separator or not device:
-            raise MyQApiError("Tend returned an invalid signaling alias")
-        return alias
+        return payload
+
+    async def async_get_keypad_power(self, camera: MyQCamera) -> KeypadPower:
+        """Read this keypad's reported power with one explicit metadata GET."""
+        if not camera.is_video_keypad:
+            raise MyQApiError("Camera is not a Video Keypad")
+        async with asyncio.timeout(15):
+            metadata = await self._async_camera_metadata(camera)
+        try:
+            return KeypadPower.from_device(metadata)
+        except ValueError:
+            raise MyQApiError("Keypad returned an invalid power report") from None
+
+    async def async_get_camera_alias(self, camera: MyQCamera) -> str:
+        """Resolve one camera's signaling destination from its Tend device ID."""
+        payload = await self._async_camera_metadata(camera)
+        return _camera_alias(camera, payload)
 
     async def _async_get_account_devices(
         self,
@@ -170,9 +212,15 @@ class MyQClient:
         await self._async_request("PUT", url)
 
     async def _async_request_json(
-        self, method: str, url: str, headers: HeadersFn | None = None
+        self, method: str, url: str, headers: HeadersFn | None = None, *, bounded: bool = False
     ) -> dict[str, object]:
-        body = await self._async_request(method, url, headers)
+        body = (
+            await self._async_request(
+                method, url, headers, allow_redirects=False, max_body_bytes=1_024_000
+            )
+            if bounded
+            else await self._async_request(method, url, headers)
+        )
         try:
             parsed = json.loads(body)
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -186,22 +234,53 @@ class MyQClient:
         method: str,
         url: str,
         headers: HeadersFn | None = None,
+        *,
+        json_body: dict[str, object] | None = None,
+        allow_redirects: bool | None = None,
+        max_body_bytes: int | None = None,
     ) -> bytes:
         self._request_cooldown.check(url)
         access_token = await self._auth.async_access_token()
         self._request_cooldown.check(url)
-        async with self._session.request(
-            method,
-            url,
-            headers=(headers or _api_headers)(access_token),
-        ) as response:
-            body = await response.read()
+        request_headers = (headers or _api_headers)(access_token)
+        if allow_redirects is None:
+            request = self._session.request(method, url, headers=request_headers)
+        else:
+            request = self._session.request(
+                method,
+                url,
+                headers=request_headers,
+                json=json_body,
+                allow_redirects=allow_redirects,
+            )
+        async with request as response:
+            if max_body_bytes is None:
+                body = await response.read()
+            else:
+                received = bytearray()
+                async for chunk in response.content.iter_chunked(65536):
+                    received.extend(chunk)
+                    if len(received) > max_body_bytes:
+                        raise MyQApiError("MyQ response exceeds size limit")
+                body = bytes(received)
             self._request_cooldown.check_response(url, response.status, response.headers)
             if response.status in {401, 403}:
                 raise MyQAuthenticationError(f"MyQ returned HTTP {response.status}")
-            if response.status >= 400:
+            if response.status >= (300 if allow_redirects is False else 400):
                 raise MyQApiError(f"MyQ returned HTTP {response.status}")
             return body
+
+
+def _camera_alias(camera: MyQCamera, payload: dict[str, object]) -> str:
+    if payload.get("id") != camera.tend_device_id:
+        raise MyQApiError("Tend returned a different camera identity")
+    alias = payload.get("alias")
+    if not isinstance(alias, str):
+        raise MyQApiError("Tend returned a camera without a signaling alias")
+    owner, separator, device = alias.partition(":")
+    if not owner or not separator or not device:
+        raise MyQApiError("Tend returned an invalid signaling alias")
+    return alias
 
 
 def _online(raw_state: object) -> bool | None:
@@ -295,3 +374,7 @@ def _tend_headers(access_token: str) -> dict[str, str]:
         "SeedonkLocale": TEND_LOCALE,
         "partnerId": TEND_PARTNER_ID,
     }
+
+
+def _metadata_headers(access_token: str) -> dict[str, str]:
+    return {**_api_headers(access_token), **_tend_headers(access_token)}

@@ -39,7 +39,7 @@ async def test_standalone_targets_are_resolved_independently() -> None:
     coordinator = MagicMock()
     coordinator.data = {}
     coordinator.cameras = {camera.serial_number: camera for camera in (FIRST, SECOND)}
-    coordinator.client.async_get_camera_alias = AsyncMock(
+    coordinator.client.async_prepare_keypad = AsyncMock(
         side_effect=["account:mac1", "account:mac2"]
     )
     first = MyQCameraEntity(coordinator, FIRST)
@@ -47,8 +47,8 @@ async def test_standalone_targets_are_resolved_independently() -> None:
 
     assert await first._async_stream_target() == TendCameraTarget(destination="account:mac1")
     assert await second._async_stream_target() == TendCameraTarget(destination="account:mac2")
-    assert coordinator.client.async_get_camera_alias.await_args_list[0].args == (FIRST,)
-    assert coordinator.client.async_get_camera_alias.await_args_list[1].args == (SECOND,)
+    assert coordinator.client.async_prepare_keypad.await_args_list[0].args == (FIRST,)
+    assert coordinator.client.async_prepare_keypad.await_args_list[1].args == (SECOND,)
     assert first.unique_id != second.unique_id
     assert first.device_info is not None
     assert first.device_info["name"] == "Front entrance"
@@ -200,7 +200,7 @@ async def test_two_live_streams_keep_distinct_camera_targets(
     coordinator.config_entry = None
     coordinator.data = {}
     coordinator.cameras = {camera.serial_number: camera for camera in (FIRST, SECOND)}
-    coordinator.client.async_get_camera_alias = AsyncMock(
+    coordinator.client.async_prepare_keypad = AsyncMock(
         side_effect=["account:mac1", "account:mac2"]
     )
     coordinator.client.async_access_token = AsyncMock(return_value="token")
@@ -259,3 +259,24 @@ async def test_two_live_streams_keep_distinct_camera_targets(
     assert len(sessions) == 2
     for session in sessions:
         session.close.assert_awaited_once()
+
+
+async def test_keypad_idle_source_and_snapshot_then_exact_alias_when_power_response_omits_it() -> (
+    None
+):
+    coordinator = MagicMock()
+    coordinator.cameras = {FIRST.serial_number: FIRST}
+    coordinator.client.async_prepare_keypad = AsyncMock(return_value=None)
+    coordinator.client.async_get_camera_alias = AsyncMock(return_value="account:mac1")
+    coordinator.client.async_get_camera_image = AsyncMock(return_value=IMAGE)
+    entity = MyQCameraEntity(coordinator, FIRST)
+    with patch("custom_components.myq.camera.TendLiveStream") as factory:
+        factory.return_value.source_url = AsyncMock(return_value="http://127.0.0.1/video")
+        await entity.stream_source()
+        assert factory.call_args.kwargs["prepare_on_disconnect"] is True
+    assert await entity.async_camera_image() is None
+    coordinator.client.async_get_camera_image.assert_not_awaited()
+    coordinator.client.async_prepare_keypad.assert_not_awaited()
+    assert await entity._async_stream_target() == TendCameraTarget(destination="account:mac1")
+    coordinator.client.async_prepare_keypad.assert_awaited_once_with(FIRST)
+    coordinator.client.async_get_camera_alias.assert_awaited_once_with(FIRST)

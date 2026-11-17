@@ -5,7 +5,9 @@ import time
 
 from aiohttp import ClientError
 from homeassistant.components.camera import Camera, CameraEntityFeature
-from homeassistant.core import HomeAssistant
+from homeassistant.components.camera.prefs import DynamicStreamSettings
+from homeassistant.components.stream import Stream
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -21,6 +23,7 @@ from .tend_protocol import TendCameraTarget
 from .tend_stream import TendLiveStream
 
 SNAPSHOT_FRAME_INTERVAL = 30.0
+_KEYPAD_IDLE_SECONDS = 20
 _CAMERA_ALIAS_TIMEOUT = 5
 
 
@@ -78,11 +81,13 @@ class MyQCameraEntity(CoordinatorEntity[MyQDataUpdateCoordinator], Camera):
         self._image: bytes | None = None
         self._captured_at = 0.0
         self._live_stream: TendLiveStream | None = None
+        self._was_available: bool = self.available
         if camera.serial_prefix == "TC":
             self._attr_supported_features = CameraEntityFeature.STREAM
             self.stream_options = {"use_wallclock_as_timestamps": True}
 
     async def async_added_to_hass(self) -> None:
+        """Restore a passive preview before publishing its capture time."""
         await super().async_added_to_hass()
         if self._preview is not None:
             await self._preview.load()
@@ -112,10 +117,12 @@ class MyQCameraEntity(CoordinatorEntity[MyQDataUpdateCoordinator], Camera):
 
     @property
     def model(self) -> str | None:
+        """Read the model from the current camera discovery result."""
         return self.camera.device_model if self.camera is not None else None
 
     @property
     def extra_state_attributes(self) -> dict[str, str | None] | None:
+        """Expose the non-identifying serial prefix used to select video support."""
         camera = self.camera
         if camera is None or camera.serial_prefix is None:
             return None
@@ -127,6 +134,7 @@ class MyQCameraEntity(CoordinatorEntity[MyQDataUpdateCoordinator], Camera):
 
     @property
     def available(self) -> bool:
+        """Require both the camera and its owning opener to remain available."""
         camera = self.camera
         if not super().available or camera is None or camera.online is False:
             return False
@@ -134,6 +142,16 @@ class MyQCameraEntity(CoordinatorEntity[MyQDataUpdateCoordinator], Camera):
             door = self.coordinator.data.get(self._opener_serial)
             return door is not None and door.online is not False
         return True
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Refresh stream providers when the camera becomes available."""
+        super()._handle_coordinator_update()
+        available = self.available
+        became_available = available and not self._was_available
+        self._was_available = available
+        if became_available and (entry := self.coordinator.config_entry) is not None:
+            entry.async_create_task(self.hass, self.async_refresh_providers())
 
     async def async_camera_image(
         self, width: int | None = None, height: int | None = None
@@ -160,6 +178,14 @@ class MyQCameraEntity(CoordinatorEntity[MyQDataUpdateCoordinator], Camera):
             self._captured_at = time.monotonic()
             return self._image
 
+    async def async_create_stream(self) -> Stream | None:
+        """Prepare battery camera playback before starting its stream reader."""
+        stream = await super().async_create_stream()
+        camera = self.camera
+        if stream and camera and camera.is_video_keypad and self._live_stream:
+            await self._live_stream.prepare_for_playback()
+        return stream
+
     async def stream_source(self) -> str | None:
         """Provide a local H.264 source for TC cameras."""
         camera = self.camera
@@ -169,7 +195,7 @@ class MyQCameraEntity(CoordinatorEntity[MyQDataUpdateCoordinator], Camera):
             self._live_stream = TendLiveStream(
                 self._async_stream_target,
                 self.coordinator.client.async_access_token,
-                idle_seconds=20 if self._preview is not None else None,
+                idle_seconds=_KEYPAD_IDLE_SECONDS if self._preview is not None else None,
                 on_snapshot=self._received_snapshot if self._preview is not None else None,
                 fallback_target_supplier=(
                     self._async_camera_target if self._opener_serial is not None else None
@@ -179,12 +205,26 @@ class MyQCameraEntity(CoordinatorEntity[MyQDataUpdateCoordinator], Camera):
                 )
                 if self.coordinator.config_entry
                 else False,
+                on_diagnostic=self._runtime_diagnostic if camera.is_video_keypad else None,
+                prepare_on_disconnect=camera.is_video_keypad,
             )
         return await self._live_stream.source_url()
 
+    def _runtime_diagnostic(self, event: str, value: str | int | float | None) -> None:
+        self.coordinator.keypad_state(self._camera_serial).stream_event(event, value)
+        self.coordinator.async_keypad_changed()
+
     async def _async_stream_target(self) -> TendCameraTarget:
+        camera = self.camera
+        if camera is None:
+            raise MyQApiError("Camera is no longer available")
+        alias = None
+        if camera.is_video_keypad:
+            alias = await self.coordinator.client.async_prepare_keypad(camera)
         if self._opener_serial is not None:
             return TendCameraTarget(opener_serial=self._opener_serial)
+        if alias is not None:
+            return TendCameraTarget(destination=alias)
         return await self._async_camera_target()
 
     async def _async_camera_target(self) -> TendCameraTarget:
@@ -208,6 +248,7 @@ class MyQCameraEntity(CoordinatorEntity[MyQDataUpdateCoordinator], Camera):
             finally:
                 self._live_stream = None
                 if self.stream is not None:
+                    self.stream.dynamic_stream_settings = DynamicStreamSettings()
                     await self.stream.stop()
                     self.stream = None
                 await super().async_will_remove_from_hass()

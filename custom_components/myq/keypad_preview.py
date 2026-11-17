@@ -36,9 +36,11 @@ class KeypadPreview:
 
     @property
     def captured_at(self) -> datetime | None:
+        """Return the capture time belonging to the last successfully decoded image."""
         return datetime.fromtimestamp(self._frame_at, UTC) if self._frame_at else None
 
     def received(self, frame: bytes) -> None:
+        """Queue a bounded live keyframe for shared local conversion."""
         if not frame or len(frame) > _MAX_FRAME:
             return
         self._pending = (frame, time.time())
@@ -65,6 +67,7 @@ class KeypadPreview:
         return {"jpeg": base64.b64encode(self._image).decode("ascii"), "at": self._frame_at}
 
     async def load(self) -> None:
+        """Restore a validated preview and its original capture time from storage."""
         stored: object = await self._store.async_load() or {}
         if not isinstance(stored, dict):
             return
@@ -96,12 +99,14 @@ class KeypadPreview:
             self._image, self._frame_at = image, float(at)
 
     async def save(self) -> None:
+        """Finish pending conversion and persist the last valid preview."""
         if self._conversion is not None:
             await self._conversion
         if self._image is not None:
             await self._store.async_save(self._data())
 
     async def image(self) -> bytes | None:
+        """Return the cached JPEG without subscribing to live video."""
         if self._image is None and self._conversion is not None:
             await asyncio.shield(self._conversion)
         return self._image
@@ -146,4 +151,5 @@ class KeypadPreview:
         return None
 
     async def remove(self) -> None:
+        """Delete the private preview file for this camera."""
         await self._store.async_remove()
