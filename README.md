@@ -20,6 +20,7 @@ The integration provides:
 - discovery of garage doors exposed by the MyQ account;
 - current door state and cloud availability;
 - open and close controls;
+- on/off controls for standalone MyQ light switches and remote lights;
 - a door-open binary sensor for Alarmo and other sensor-based automations;
 - vacation mode, work-light, fault, cycle-count, and activation diagnostics
   when provided by MyQ;
@@ -37,7 +38,8 @@ After an accepted open or close command, the integration waits 1 second before c
 ## Requirements
 
 - Home Assistant 2026.7.4 or newer;
-- a MyQ residential account with at least one connected garage-door opener.
+- a MyQ residential account with at least one connected garage-door opener,
+  camera, or light control.
 
 The initial release has been tested with a United States MyQ account. Reports
 from other regions are welcome.
@@ -86,6 +88,18 @@ stores the issued OAuth tokens in the config entry and refreshes them
 automatically. If MyQ rejects token refresh or account access, Home Assistant
 requests reauthentication.
 
+## Light controls
+
+Standalone MyQ light controls get an on/off light entity using their MyQ name.
+Accounts containing only light controls can also be added. Brightness and direct
+control of an opener's built-in work light are not supported; the existing
+work-light binary sensor reports its state only.
+
+After a light command, status polling starts after 1 second and slows to a
+5-second interval until MyQ reports the requested state, for up to 60 seconds.
+Light entities always show the state reported by MyQ. Real-device validation
+of light commands and state updates is pending.
+
 ## Cameras
 
 Cameras that are not attached to an opener, including the myQ Video Keypad,
@@ -127,6 +141,21 @@ pytest
 This is a community-maintained project and is not affiliated with, endorsed by,
 or associated with The Chamberlain Group LLC. MyQ, Chamberlain, and LiftMaster
 are trademarks of their respective owners.
+
+### Video Keypad previews and battery
+
+The Video Keypad preview is passive: opening an idle dashboard does not fetch a
+cloud image or start live video. It shows the most recent keyframe received during
+an explicit live session, saved locally and restored after integration reload or
+Home Assistant restart. Before the first live view there is no preview. The **Snapshot time** diagnostic sensor and the `preview_updated` camera attribute
+show when the preview was captured.
+
+Keypad video uses a 20-second idle grace period after the final internal consumer
+leaves (Home Assistant's own stream worker may remain attached longer). Ordinary
+garage camera behavior is unchanged. Avoid stream preloading on a battery keypad.
+Live viewing still uses battery and cloud authorization/signaling; this change
+does not add background recording or establish a battery-life improvement.
+
 
 ### Restrict camera video to the LAN
 

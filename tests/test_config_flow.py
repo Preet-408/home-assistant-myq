@@ -23,7 +23,7 @@ from custom_components.myq.exceptions import (
     MyQInvalidMfaError,
     MyQUnsupportedAuthPageError,
 )
-from custom_components.myq.models import GarageDoor, MyQCamera, MyQDevices, OAuthTokens
+from custom_components.myq.models import GarageDoor, MyQCamera, MyQDevices, MyQLight, OAuthTokens
 
 EMAIL = "driver@example.com"
 PASSWORD = "secret"
@@ -409,12 +409,16 @@ async def test_reauthentication_retries_mfa_without_replacing_entry(
 
 @pytest.mark.parametrize(
     ("error_type", "error_key"),
-    [(MyQInvalidCredentialsError, "invalid_auth"), (ClientConnectionError, "cannot_connect")],
+    [
+        (MyQInvalidCredentialsError, "invalid_auth"),
+        (ClientConnectionError, "cannot_connect"),
+        (TimeoutError, "cannot_connect"),
+    ],
 )
 async def test_reauthentication_credential_failure_preserves_entry(
     hass: HomeAssistant,
     mock_login_session: MagicMock,
-    error_type: type[MyQInvalidCredentialsError | ClientConnectionError],
+    error_type: type[MyQInvalidCredentialsError | ClientConnectionError | TimeoutError],
     error_key: str,
 ) -> None:
     original_data = _entry_data()
@@ -473,6 +477,64 @@ async def test_reauthentication_offers_browser_sign_in(
     mock_login_session.async_start.assert_not_awaited()
 
 
+async def test_mfa_timeout_keeps_the_flow_retryable(
+    hass: HomeAssistant, mock_login_session: MagicMock
+) -> None:
+    mock_login_session.async_start.return_value = None
+    mock_login_session.async_submit_mfa.side_effect = TimeoutError
+    result = await _submit_credentials(hass)
+
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {"code": "123456"})
+
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "mfa"
+    assert result["errors"] == {"base": "cannot_connect"}
+    mock_login_session.http_session.detach.assert_not_called()
+    assert not hass.config_entries.async_entries(DOMAIN)
+
+
+async def test_browser_timeout_restarts_the_browser_flow(
+    hass: HomeAssistant, mock_login_session: MagicMock
+) -> None:
+    mock_login_session.async_complete_browser.side_effect = TimeoutError
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "browser_start"}
+    )
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {CONF_EMAIL: EMAIL})
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"callback_url": "com.myqops://android?code=code&state=state"}
+    )
+
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "browser"
+    assert result["errors"] == {"base": "cannot_connect"}
+    assert mock_login_session.start_browser.call_count == 2
+    mock_login_session.http_session.detach.assert_not_called()
+    hass.config_entries.flow.async_abort(result["flow_id"])
+    mock_login_session.http_session.detach.assert_called_once_with()
+    assert not hass.config_entries.async_entries(DOMAIN)
+
+
+async def test_discovery_timeout_aborts_and_releases_the_session(
+    hass: HomeAssistant,
+    mock_login_session: MagicMock,
+    mock_myq_client: MagicMock,
+) -> None:
+    mock_login_session.async_start.return_value = TOKENS
+    mock_myq_client.async_get_devices.side_effect = TimeoutError
+
+    result = await _submit_credentials(hass)
+
+    assert result["type"] is data_entry_flow.FlowResultType.ABORT
+    assert result["reason"] == "cannot_connect"
+    mock_login_session.http_session.detach.assert_called_once_with()
+    assert not hass.config_entries.async_entries(DOMAIN)
+
+
 async def _submit_credentials(
     hass: HomeAssistant,
     *,
@@ -524,20 +586,27 @@ async def test_lan_only_option_is_opt_in_and_preserves_other_options(hass: HomeA
     assert entry.options["unrelated"] == 7 and entry.options["camera_lan_only"] is True
 
 
-@pytest.mark.parametrize("has_camera", [False, True])
-async def test_setup_accepts_camera_only_accounts_and_rejects_empty_accounts(
+@pytest.mark.parametrize(
+    ("devices", "accepted"),
+    [
+        (MyQDevices(), False),
+        (MyQDevices(cameras=(MyQCamera("TC-0007-20000001"),)), True),
+        (MyQDevices(lights=(MyQLight("account-1", "lamp-1", "Porch", None, "on", True),)), True),
+    ],
+)
+async def test_setup_accepts_supported_devices_and_rejects_empty_accounts(
     hass: HomeAssistant,
     mock_login_session: MagicMock,
     mock_myq_client: MagicMock,
-    has_camera: bool,
+    devices: MyQDevices,
+    accepted: bool,
 ) -> None:
     mock_login_session.async_start.return_value = TOKENS
-    cameras = (MyQCamera("TC-0007-20000001"),) if has_camera else ()
-    mock_myq_client.async_get_devices.return_value = MyQDevices(cameras=cameras)
+    mock_myq_client.async_get_devices.return_value = devices
 
     result = await _submit_credentials(hass)
 
-    if has_camera:
+    if accepted:
         assert result["type"] is data_entry_flow.FlowResultType.CREATE_ENTRY
     else:
         assert result["type"] is data_entry_flow.FlowResultType.ABORT

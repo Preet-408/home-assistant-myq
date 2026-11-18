@@ -109,11 +109,35 @@ class GarageDoor:
 
 
 @dataclass(frozen=True, slots=True)
+class MyQLight:
+    """A standalone light control and its reported power state."""
+
+    account_id: str
+    serial_number: str
+    name: str
+    device_model: str | None
+    lamp_state: str | None
+    online: bool | None
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return the reported power state without treating unknown as off."""
+        match self.lamp_state:
+            case "on":
+                return True
+            case "off":
+                return False
+            case _:
+                return None
+
+
+@dataclass(frozen=True, slots=True)
 class MyQDevices:
-    """One discovery result containing doors and cameras from all accounts."""
+    """One discovery result containing supported devices from all accounts."""
 
     doors: tuple[GarageDoor, ...] = ()
     cameras: tuple[MyQCamera, ...] = ()
+    lights: tuple[MyQLight, ...] = ()
 
     @property
     def standalone_cameras(self) -> tuple[MyQCamera, ...]:

@@ -1,6 +1,8 @@
 """Standalone cameras retain their own identity, names, and availability."""
 
 from dataclasses import replace
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -8,6 +10,7 @@ import pytest
 from homeassistant.components.camera import async_get_image
 from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -20,6 +23,7 @@ from custom_components.myq.const import (
     DOMAIN,
     MFA_METHOD_EMAIL,
 )
+from custom_components.myq.keypad_preview import KeypadPreview
 from custom_components.myq.models import GarageDoor, MyQCamera, MyQDevices
 from custom_components.myq.runtime import MyQRuntimeData
 from custom_components.myq.tend_protocol import CameraTargetSupplier, TendCameraTarget
@@ -35,7 +39,7 @@ async def test_standalone_targets_are_resolved_independently() -> None:
     coordinator = MagicMock()
     coordinator.data = {}
     coordinator.cameras = {camera.serial_number: camera for camera in (FIRST, SECOND)}
-    coordinator.client.async_get_camera_alias = AsyncMock(
+    coordinator.client.async_prepare_keypad = AsyncMock(
         side_effect=["account:mac1", "account:mac2"]
     )
     first = MyQCameraEntity(coordinator, FIRST)
@@ -43,8 +47,8 @@ async def test_standalone_targets_are_resolved_independently() -> None:
 
     assert await first._async_stream_target() == TendCameraTarget(destination="account:mac1")
     assert await second._async_stream_target() == TendCameraTarget(destination="account:mac2")
-    assert coordinator.client.async_get_camera_alias.await_args_list[0].args == (FIRST,)
-    assert coordinator.client.async_get_camera_alias.await_args_list[1].args == (SECOND,)
+    assert coordinator.client.async_prepare_keypad.await_args_list[0].args == (FIRST,)
+    assert coordinator.client.async_prepare_keypad.await_args_list[1].args == (SECOND,)
     assert first.unique_id != second.unique_id
     assert first.device_info is not None
     assert first.device_info["name"] == "Front entrance"
@@ -66,10 +70,12 @@ async def test_unavailable_and_non_tc_cameras_do_not_start_video() -> None:
     coordinator.client.async_get_camera_alias.assert_not_called()
 
 
+@pytest.mark.parametrize("hass_storage", [{}])  # Exercise removal with an on-disk Store.
 @pytest.mark.parametrize("with_door", [False, True])
 async def test_setup_preserves_devices_and_updates_cameras_without_extra_polling(
-    hass: HomeAssistant, with_door: bool
+    hass: HomeAssistant, with_door: bool, tmp_path: Path
 ) -> None:
+    hass.config.config_dir = str(tmp_path)
     entry = MockConfigEntry(
         domain=DOMAIN,
         unique_id="driver@example.com",
@@ -84,6 +90,13 @@ async def test_setup_preserves_devices_and_updates_cameras_without_extra_polling
         },
     )
     entry.add_to_hass(hass)
+    restored_at = None
+    if with_door:
+        stored = KeypadPreview(hass, FIRST.serial_number)
+        with patch.object(stored, "_decode", return_value=IMAGE):
+            stored.received(b"synthetic-frame")
+            await stored.save()
+        restored_at = stored.captured_at
     client = MagicMock()
     doors = (DOOR,) if with_door else ()
     client.async_get_devices = AsyncMock(
@@ -106,9 +119,30 @@ async def test_setup_preserves_devices_and_updates_cameras_without_extra_polling
         assert entity is not None and entity.device_id == device.id
         state = hass.states.get(entity_id)
         assert state is not None and state.attributes["friendly_name"] == f"{camera.name} Camera"
-        assert (await async_get_image(hass, entity_id)).content == IMAGE
-    assert client.async_get_camera_image.await_args_list[0].args == (FIRST,)
-    assert client.async_get_camera_image.await_args_list[1].args == (SECOND,)
+        expected_at = restored_at if camera == FIRST else None
+        if expected_at is None:
+            with pytest.raises(HomeAssistantError):
+                await async_get_image(hass, entity_id)
+        assert state.attributes["preview_updated"] == (
+            expected_at.isoformat() if expected_at is not None else None
+        )
+        timestamp_id = registry.async_get_entity_id(
+            "sensor", DOMAIN, f"{camera.serial_number}_keypad_snapshot_time"
+        )
+        assert timestamp_id is not None
+        timestamp = hass.states.get(timestamp_id)
+        assert timestamp is not None
+        assert timestamp.state == (
+            expected_at.isoformat(timespec="seconds") if expected_at is not None else "unknown"
+        )
+    coordinator = cast(MyQRuntimeData, entry.runtime_data).coordinator
+    updated_at = datetime.now(UTC)
+    coordinator.async_set_keypad_snapshot_time(SECOND.serial_number, updated_at)
+    await hass.async_block_till_done()
+    assert timestamp_id is not None
+    updated = hass.states.get(timestamp_id)
+    assert updated is not None and updated.state == updated_at.isoformat(timespec="seconds")
+    client.async_get_camera_image.assert_not_awaited()
     if with_door:
         attached = registry.async_get_entity_id("camera", DOMAIN, "door-1_camera")
         assert attached is not None
@@ -140,20 +174,33 @@ async def test_setup_preserves_devices_and_updates_cameras_without_extra_polling
     assert FIRST.serial_number not in runtime.coordinator.cameras
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
+    if with_door:
+        after_unload = KeypadPreview(hass, FIRST.serial_number)
+        await after_unload.load()
+        assert await after_unload.image() == IMAGE
+        stored_file = tmp_path / ".storage" / f"myq.{FIRST.serial_number}.preview"
+        assert stored_file.is_file()
+        await hass.config_entries.async_remove(entry.entry_id)
+        assert not stored_file.exists()
+        after_remove = KeypadPreview(hass, FIRST.serial_number)
+        await after_remove.load()
+        assert await after_remove.image() is None
 
 
-async def test_two_live_streams_keep_distinct_camera_targets(socket_enabled: None) -> None:
+async def test_two_live_streams_keep_distinct_camera_targets(
+    hass: HomeAssistant, socket_enabled: None
+) -> None:
     import asyncio
     from collections.abc import Callable
 
     from aiohttp import ClientSession
 
     del socket_enabled
-    coordinator = MagicMock()
+    coordinator = MagicMock(hass=hass)
     coordinator.config_entry = None
     coordinator.data = {}
     coordinator.cameras = {camera.serial_number: camera for camera in (FIRST, SECOND)}
-    coordinator.client.async_get_camera_alias = AsyncMock(
+    coordinator.client.async_prepare_keypad = AsyncMock(
         side_effect=["account:mac1", "account:mac2"]
     )
     coordinator.client.async_access_token = AsyncMock(return_value="token")
@@ -178,7 +225,10 @@ async def test_two_live_streams_keep_distinct_camera_targets(socket_enabled: Non
         return session
 
     entities = [MyQCameraEntity(coordinator, camera) for camera in (FIRST, SECOND)]
-    with patch("custom_components.myq.tend_stream.TendSession.open", side_effect=open_session):
+    with (
+        patch.object(KeypadPreview, "_decode", return_value=IMAGE),
+        patch("custom_components.myq.tend_stream.TendSession.open", side_effect=open_session),
+    ):
         try:
             urls = [await entity.stream_source() for entity in entities]
             assert urls[0] is not None and urls[1] is not None
@@ -209,3 +259,24 @@ async def test_two_live_streams_keep_distinct_camera_targets(socket_enabled: Non
     assert len(sessions) == 2
     for session in sessions:
         session.close.assert_awaited_once()
+
+
+async def test_keypad_idle_source_and_snapshot_then_exact_alias_when_power_response_omits_it() -> (
+    None
+):
+    coordinator = MagicMock()
+    coordinator.cameras = {FIRST.serial_number: FIRST}
+    coordinator.client.async_prepare_keypad = AsyncMock(return_value=None)
+    coordinator.client.async_get_camera_alias = AsyncMock(return_value="account:mac1")
+    coordinator.client.async_get_camera_image = AsyncMock(return_value=IMAGE)
+    entity = MyQCameraEntity(coordinator, FIRST)
+    with patch("custom_components.myq.camera.TendLiveStream") as factory:
+        factory.return_value.source_url = AsyncMock(return_value="http://127.0.0.1/video")
+        await entity.stream_source()
+        assert factory.call_args.kwargs["prepare_on_disconnect"] is True
+    assert await entity.async_camera_image() is None
+    coordinator.client.async_get_camera_image.assert_not_awaited()
+    coordinator.client.async_prepare_keypad.assert_not_awaited()
+    assert await entity._async_stream_target() == TendCameraTarget(destination="account:mac1")
+    coordinator.client.async_prepare_keypad.assert_awaited_once_with(FIRST)
+    coordinator.client.async_get_camera_alias.assert_awaited_once_with(FIRST)

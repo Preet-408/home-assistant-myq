@@ -2,13 +2,14 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from time import monotonic
-from typing import Literal
+from typing import Literal, assert_never
 
 from aiohttp import ClientError
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
@@ -24,7 +25,7 @@ from .const import (
 )
 from .exceptions import MyQApiError, MyQAuthenticationError, MyQRateLimitError
 from .keypad_state import POWER_MAX_AGE, KeypadPower, KeypadState
-from .models import MyQCamera
+from .models import GarageDoor, MyQCamera, MyQLight
 from .runtime import MyQConfigEntry, MyQCoordinatorData
 
 _LOGGER = logging.getLogger(__name__)
@@ -32,7 +33,7 @@ _LOGGER = logging.getLogger(__name__)
 
 @dataclass(slots=True)
 class _PendingCommand:
-    target_state: Literal["open", "closed"]
+    target_state: Literal["open", "closed", "on", "off"]
     started_at: float
     motion: Literal["opening", "closing"] | None = None
     interval: timedelta = COMMAND_UPDATE_INITIAL_INTERVAL
@@ -56,6 +57,8 @@ class MyQDataUpdateCoordinator(DataUpdateCoordinator[MyQCoordinatorData]):
         )
         self.client = client
         self.cameras: dict[str, MyQCamera] = {}
+        self.lights: dict[str, MyQLight] = {}
+        self.keypad_snapshot_times: dict[str, datetime] = {}
         self._pending_commands: dict[str, _PendingCommand] = {}
         self._failure_retry_interval = DEFAULT_UPDATE_INTERVAL
 
@@ -69,6 +72,18 @@ class MyQDataUpdateCoordinator(DataUpdateCoordinator[MyQCoordinatorData]):
         self._power_store = Store[dict[str, object]](
             hass, 1, f"{DOMAIN}.{entry.entry_id}.keypads", private=True
         )
+
+    def snapshot_signal(self, serial: str) -> str:
+        """Address updates to the timestamp sensor for this entry and keypad."""
+        assert self.config_entry is not None
+        return f"{DOMAIN}_{self.config_entry.entry_id}_{serial}_snapshot"
+
+    @callback
+    def async_set_keypad_snapshot_time(self, serial: str, at: datetime | None) -> None:
+        """Publish a locally captured preview time without requesting device data."""
+        if at is not None:
+            self.keypad_snapshot_times[serial] = at
+            async_dispatcher_send(self.hass, self.snapshot_signal(serial))
 
     @property
     def keypads(self) -> tuple[MyQCamera, ...]:
@@ -170,7 +185,7 @@ class MyQDataUpdateCoordinator(DataUpdateCoordinator[MyQCoordinatorData]):
 
     @callback
     def async_schedule_command_updates(
-        self, serial_number: str, target_state: Literal["open", "closed"]
+        self, serial_number: str, target_state: Literal["open", "closed", "on", "off"]
     ) -> None:
         """Schedule status updates with increasing delays after an accepted command."""
         if self.config_entry and self.config_entry.pref_disable_polling:
@@ -220,35 +235,48 @@ class MyQDataUpdateCoordinator(DataUpdateCoordinator[MyQCoordinatorData]):
             ) from error
         self._failure_retry_interval = DEFAULT_UPDATE_INTERVAL
         self.cameras = {camera.serial_number: camera for camera in devices.standalone_cameras}
+        self.lights = {light.serial_number: light for light in devices.lights}
         data = {door.serial_number: door for door in devices.doors}
         now = monotonic()
         for serial_number, command in pending_at_request.items():
             if self._pending_commands.get(serial_number) is not command:
                 continue
-            elapsed = now - command.started_at
-            door = data.get(serial_number)
-            if door is not None and (
-                (command.motion, door.door_state)
-                not in (("opening", "closed"), ("closing", "open"))
-            ):
-                command.motion = None
-            if (
-                elapsed >= COMMAND_UPDATE_TIMEOUT.total_seconds()
-                or door is None
-                or door.online is False
-                or (
-                    elapsed >= COMMAND_UPDATE_MIN_DURATION.total_seconds()
-                    and door.door_state == command.target_state
-                )
-            ):
-                del self._pending_commands[serial_number]
-            else:
-                command.interval = min(
-                    command.interval + COMMAND_UPDATE_INITIAL_INTERVAL,
-                    COMMAND_UPDATE_INTERVAL,
-                )
+            self._advance_command(serial_number, command, data, now)
         self._update_command_interval()
         return data
+
+    def _advance_command(
+        self, serial: str, command: _PendingCommand, data: MyQCoordinatorData, now: float
+    ) -> None:
+        device: GarageDoor | MyQLight | None
+        match command.target_state:
+            case "open" | "closed":
+                device = data.get(serial)
+                reported_state = device.door_state if device is not None else None
+                min_duration = COMMAND_UPDATE_MIN_DURATION
+                if device is not None and (
+                    (command.motion, device.door_state)
+                    not in (("opening", "closed"), ("closing", "open"))
+                ):
+                    command.motion = None
+            case "on" | "off":
+                device = self.lights.get(serial)
+                reported_state = device.lamp_state if device is not None else None
+                min_duration = timedelta(0)
+            case unexpected:
+                assert_never(unexpected)
+        elapsed = now - command.started_at
+        if (
+            elapsed >= COMMAND_UPDATE_TIMEOUT.total_seconds()
+            or device is None
+            or device.online is False
+            or (elapsed >= min_duration.total_seconds() and reported_state == command.target_state)
+        ):
+            del self._pending_commands[serial]
+        else:
+            command.interval = min(
+                command.interval + COMMAND_UPDATE_INITIAL_INTERVAL, COMMAND_UPDATE_INTERVAL
+            )
 
     def _stop_command_updates(self, pending_at_request: dict[str, _PendingCommand]) -> None:
         self._pending_commands = {

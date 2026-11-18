@@ -76,7 +76,7 @@
     "abort": {
       "already_configured": "Det här MyQ-kontot är redan konfigurerat. Ingen ytterligare konfiguration behövs.",
       "cannot_connect": "Autentiseringen lyckades, men MyQ:s enhetsidentifiering gick inte att nå.",
-      "no_devices": "Inga garageportar eller kameror hittades på det här MyQ-kontot.",
+      "no_devices": "Inga garageportar, kameror eller belysningskontroller hittades på det här MyQ-kontot.",
       "reauth_successful": "MyQ har återanslutits.",
       "unknown": "MyQ returnerade ett oväntat svar."
     }
@@ -178,6 +178,9 @@
           "p2p": "Direktanslutning",
           "cloud_relay": "Molnrelä"
         }
+      },
+      "keypad_snapshot_time": {
+        "name": "Tidpunkt för ögonblicksbild"
       }
     },
     "camera": {
