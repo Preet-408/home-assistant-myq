@@ -31,7 +31,7 @@ class MyQKeypadButton(MyQKeypadEntity, ButtonEntity):
     async def async_press(self) -> None:
         """Refresh cached power metadata and translate request failures."""
         try:
-            await self.coordinator.async_refresh_keypad_power(self._serial)
+            await self.coordinator.keypad_diagnostics.async_refresh_power(self._serial)
         except (MyQError, ClientError, TimeoutError) as error:
             raise HomeAssistantError(
                 translation_domain=DOMAIN, translation_key="keypad_power_refresh_failed"

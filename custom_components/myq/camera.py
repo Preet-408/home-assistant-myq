@@ -91,7 +91,7 @@ class MyQCameraEntity(CoordinatorEntity[MyQDataUpdateCoordinator], Camera):
         await super().async_added_to_hass()
         if self._preview is not None:
             await self._preview.load()
-            self.coordinator.async_set_keypad_snapshot_time(
+            self.coordinator.keypad_diagnostics.async_set_snapshot_time(
                 self._camera_serial, self._preview.captured_at
             )
 
@@ -101,7 +101,7 @@ class MyQCameraEntity(CoordinatorEntity[MyQDataUpdateCoordinator], Camera):
 
     def _preview_updated(self) -> None:
         if self._preview is not None:
-            self.coordinator.async_set_keypad_snapshot_time(
+            self.coordinator.keypad_diagnostics.async_set_snapshot_time(
                 self._camera_serial, self._preview.captured_at
             )
             if self.hass and self.entity_id:
@@ -211,8 +211,7 @@ class MyQCameraEntity(CoordinatorEntity[MyQDataUpdateCoordinator], Camera):
         return await self._live_stream.source_url()
 
     def _runtime_diagnostic(self, event: str, value: str | int | float | None) -> None:
-        self.coordinator.keypad_state(self._camera_serial).stream_event(event, value)
-        self.coordinator.async_keypad_changed()
+        self.coordinator.keypad_diagnostics.async_stream_event(self._camera_serial, event, value)
 
     async def _async_stream_target(self) -> TendCameraTarget:
         camera = self.camera
@@ -244,7 +243,7 @@ class MyQCameraEntity(CoordinatorEntity[MyQDataUpdateCoordinator], Camera):
         finally:
             try:
                 if self._preview is not None:
-                    await self._preview.save()
+                    await self._preview.close()
             finally:
                 self._live_stream = None
                 if self.stream is not None:

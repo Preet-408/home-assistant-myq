@@ -25,7 +25,7 @@ class MyQKeypadEntity(CoordinatorEntity[MyQDataUpdateCoordinator]):
     @property
     def keypad_state(self) -> KeypadState:
         """Return this device's cached power and session diagnostics."""
-        return self.coordinator.keypad_state(self._serial)
+        return self.coordinator.keypad_diagnostics.state(self._serial)
 
     @property
     def available(self) -> bool:

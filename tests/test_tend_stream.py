@@ -524,20 +524,25 @@ async def test_ha_playback_waits_for_wake_before_opening_http_source(
     open_session.assert_awaited_once()
 
 
-async def test_preparation_error_preserves_cooldown_and_category(live: TendLiveStream) -> None:
+@pytest.mark.parametrize(
+    "failure_name", ["rate_limit", "authentication", "network", "wake_timeout"]
+)
+async def test_preparation_error_preserves_cooldown_and_category(
+    live: TendLiveStream, failure_name: str
+) -> None:
     from custom_components.myq.exceptions import (
         MyQAuthenticationError,
         MyQRateLimitError,
         MyQWakeTimeoutError,
     )
 
-    for failure, expected in [
-        (MyQRateLimitError(90), "retry after 90s"),
-        (MyQAuthenticationError("private"), "MyQAuthenticationError"),
-        (OSError("private"), "OSError"),
-        (MyQWakeTimeoutError("private"), "MyQWakeTimeoutError"),
-    ]:
-        live._target_supplier = AsyncMock(side_effect=failure)
-        with pytest.raises(TendStreamError, match=expected) as result:
-            await live._subscribe()
-        assert "private" not in str(result.value)
+    failure, expected = {
+        "rate_limit": (MyQRateLimitError(90), "retry after 90s"),
+        "authentication": (MyQAuthenticationError("private"), "MyQAuthenticationError"),
+        "network": (OSError("private"), "OSError"),
+        "wake_timeout": (MyQWakeTimeoutError("private"), "MyQWakeTimeoutError"),
+    }[failure_name]
+    live._target_supplier = AsyncMock(side_effect=failure)
+    with pytest.raises(TendStreamError, match=expected) as result:
+        await live._subscribe()
+    assert "private" not in str(result.value)

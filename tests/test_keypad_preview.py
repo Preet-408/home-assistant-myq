@@ -73,7 +73,7 @@ async def test_preview_survives_reload_and_shares_local_conversion(hass: HomeAss
         assert captured_at is not None
         process.returncode = 1
         first.received(IDR + b"invalid")
-        await first.save()
+        await first.close()
         assert first.captured_at == captured_at
         assert await first.image() == JPEG
         restored = KeypadPreview(hass, KEYPAD.serial_number)

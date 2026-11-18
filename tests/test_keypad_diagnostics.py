@@ -36,7 +36,7 @@ async def test_all_sensor_reads_and_explicit_updates_use_only_local_state() -> N
     state = KeypadState(power=KeypadPower(time.time(), 65, "LPDS"))
     coordinator = MagicMock(last_update_success=True)
     coordinator.keypads = (KEYPAD,)
-    coordinator.keypad_state.return_value = state
+    coordinator.keypad_diagnostics.state.return_value = state
     coordinator.async_request_refresh = AsyncMock()
     coordinator.client.async_get_keypad_power = AsyncMock()
     coordinator.client.async_access_token = AsyncMock()
@@ -60,25 +60,28 @@ async def test_explicit_power_requests_coalesce_and_persist_cache(hass: HomeAssi
     client.async_get_keypad_power = AsyncMock(return_value=KeypadPower(time.time(), 71, "LPDS"))
     coordinator = MyQDataUpdateCoordinator(hass, entry, client)
     coordinator.cameras = {KEYPAD.serial_number: KEYPAD}
-    coordinator._power_store = MagicMock(
+    coordinator.keypad_diagnostics._store = MagicMock(
         async_load=AsyncMock(return_value={KEYPAD.serial_number: {"untouched": 1}}),
         async_save=AsyncMock(),
     )
-    await coordinator.async_load_keypad_state()
+    await coordinator.keypad_diagnostics.async_load()
     await asyncio.gather(
-        *(coordinator.async_refresh_keypad_power(KEYPAD.serial_number) for _ in range(3))
+        *(
+            coordinator.keypad_diagnostics.async_refresh_power(KEYPAD.serial_number)
+            for _ in range(3)
+        )
     )
     client.async_get_keypad_power.assert_awaited_once_with(KEYPAD)
-    saved = coordinator._power_store.async_save.await_args.args[0]
+    saved = coordinator.keypad_diagnostics._store.async_save.await_args.args[0]
     assert saved[KEYPAD.serial_number]["untouched"] == 1
     client.async_get_keypad_power.reset_mock()
     restored = MyQDataUpdateCoordinator(hass, entry, client)
     restored.cameras = {KEYPAD.serial_number: KEYPAD}
-    restored._power_store = MagicMock(async_load=AsyncMock(return_value=saved))
-    await restored.async_load_keypad_state()
+    restored.keypad_diagnostics._store = MagicMock(async_load=AsyncMock(return_value=saved))
+    await restored.keypad_diagnostics.async_load()
     assert (
-        restored.keypad_state(KEYPAD.serial_number).power
-        == coordinator.keypad_state(KEYPAD.serial_number).power
+        restored.keypad_diagnostics.state(KEYPAD.serial_number).power
+        == coordinator.keypad_diagnostics.state(KEYPAD.serial_number).power
     )
     client.async_get_keypad_power.assert_not_awaited()
     await restored.async_shutdown()
@@ -179,15 +182,19 @@ async def test_shutdown_cancels_active_refresh_and_rejects_queued_refresh(
     client.async_get_keypad_power = AsyncMock(side_effect=slow_read)
     coordinator = MyQDataUpdateCoordinator(hass, entry, client)
     coordinator.cameras = {KEYPAD.serial_number: KEYPAD}
-    coordinator._power_store = MagicMock(async_save=AsyncMock())
-    first = asyncio.create_task(coordinator.async_refresh_keypad_power(KEYPAD.serial_number))
+    coordinator.keypad_diagnostics._store = MagicMock(async_save=AsyncMock())
+    first = asyncio.create_task(
+        coordinator.keypad_diagnostics.async_refresh_power(KEYPAD.serial_number)
+    )
     await entered.wait()
-    queued = asyncio.create_task(coordinator.async_refresh_keypad_power(KEYPAD.serial_number))
+    queued = asyncio.create_task(
+        coordinator.keypad_diagnostics.async_refresh_power(KEYPAD.serial_number)
+    )
     await coordinator.async_shutdown()
     with pytest.raises(asyncio.CancelledError):
         await first
     with pytest.raises(MyQApiError, match="shut down"):
         await queued
-    assert not coordinator._power_expiry
-    coordinator._power_store.async_save.assert_not_awaited()
+    assert not coordinator.keypad_diagnostics._power_expiry
+    coordinator.keypad_diagnostics._store.async_save.assert_not_awaited()
     client.async_get_keypad_power.assert_awaited_once()
