@@ -7,6 +7,7 @@ import logging
 import secrets
 import time
 from collections.abc import Awaitable, Callable
+from time import monotonic
 
 from aiohttp import ClientError, web
 
@@ -18,6 +19,7 @@ _LOGGER = logging.getLogger(__name__)
 _IDLE_SECONDS = 60
 _FRAME_TIMEOUT = 30
 _SHUTDOWN_TIMEOUT = 0.1
+_PREPARATION_RETRY_DELAY = 30.0
 
 
 def _nals(data: bytes) -> list[tuple[int, bytes]]:
@@ -87,6 +89,8 @@ class TendLiveStream:
         self._first_frame_started: float | None = None
         self._target_supplier = target_supplier
         self._target_task: asyncio.Future[TendCameraTarget] | None = None
+        self._preparation_error: str | None = None
+        self._preparation_retry_at = 0.0
         self._prepare_on_disconnect = prepare_on_disconnect
         self._fallback_target_supplier = fallback_target_supplier
         self._lan_only = lan_only
@@ -186,15 +190,25 @@ class TendLiveStream:
             return viewer
 
     async def _prepare_target(self) -> TendCameraTarget:
+        if self._preparation_error is not None and monotonic() < self._preparation_retry_at:
+            raise TendStreamError(self._preparation_error)
         if self._target_task is None:
             self._target_task = asyncio.ensure_future(self._target_supplier())
         try:
-            return await self._target_task
+            target = await self._target_task
         except (ClientError, MyQError, OSError) as error:
             reason = type(error).__name__
+            retry_delay = _PREPARATION_RETRY_DELAY
             if isinstance(error, MyQRateLimitError):
                 reason += f" (retry after {error.retry_after:.0f}s)"
-            raise TendStreamError(f"Camera could not prepare for live video: {reason}") from None
+                retry_delay = max(retry_delay, error.retry_after)
+            self._preparation_error = f"Camera could not prepare for live video: {reason}"
+            self._preparation_retry_at = monotonic() + retry_delay
+            raise TendStreamError(self._preparation_error) from None
+        else:
+            self._preparation_error = None
+            self._preparation_retry_at = 0.0
+            return target
         finally:
             self._target_task = None
 
