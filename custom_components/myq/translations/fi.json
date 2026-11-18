@@ -76,7 +76,7 @@
     "abort": {
       "already_configured": "Tämä MyQ-tili on jo määritetty. Lisämäärityksiä ei tarvita.",
       "cannot_connect": "Tunnistautuminen onnistui, mutta MyQ:n laitehakupalveluun ei saatu yhteyttä.",
-      "no_devices": "Tältä MyQ-tililtä ei löytynyt autotallin ovia tai kameroita.",
+      "no_devices": "Tältä MyQ-tililtä ei löytynyt autotallin ovia, kameroita tai valaistuksen ohjauslaitteita.",
       "reauth_successful": "MyQ yhdistettiin uudelleen.",
       "unknown": "MyQ palautti odottamattoman vastauksen."
     }

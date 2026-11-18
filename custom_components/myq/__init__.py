@@ -30,6 +30,7 @@ PLATFORMS: tuple[Platform, ...] = (
     Platform.BUTTON,
     Platform.CAMERA,
     Platform.COVER,
+    Platform.LIGHT,
     Platform.SENSOR,
 )
 

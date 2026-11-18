@@ -337,7 +337,7 @@ class MyQConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._close_login()
             return self.async_abort(reason="unknown")
         self._close_login()
-        if not devices.doors and not devices.cameras:
+        if not devices.doors and not devices.cameras and not devices.lights:
             return self.async_abort(reason="no_devices")
 
         data = MyQConfigData(

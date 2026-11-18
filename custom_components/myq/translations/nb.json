@@ -76,7 +76,7 @@
     "abort": {
       "already_configured": "Denne MyQ-kontoen er allerede konfigurert. Ingen ytterligere konfigurasjon er nødvendig.",
       "cannot_connect": "Autentiseringen var vellykket, men MyQs tjeneste for enhetsoppdagelse kunne ikke nås.",
-      "no_devices": "Ingen garasjeporter eller kameraer ble funnet på denne MyQ-kontoen.",
+      "no_devices": "Ingen garasjeporter, kameraer eller lysstyringsenheter ble funnet på denne MyQ-kontoen.",
       "reauth_successful": "MyQ ble koblet til på nytt.",
       "unknown": "MyQ returnerte et uventet svar."
     }
