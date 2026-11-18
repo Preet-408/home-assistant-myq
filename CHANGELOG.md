@@ -2,6 +2,18 @@
 
 <!-- version list -->
 
+## v0.2.16 (2026-11-18)
+
+Add light controls and improve Video Keypad support
+
+- Add standalone MyQ light discovery, on/off controls, and light-only account setup
+- Wake sleeping Video Keypads and share live video sessions
+- Persist passive keypad previews and complete snapshot-time translations
+- Handle request timeouts and clean up preloaded camera streams
+- Refresh WebRTC providers after camera recovery
+- Update light-control translations and documentation
+
+
 ## v0.2.15 (2026-11-16)
 
 Add Video Keypad diagnostics and manual power refresh
