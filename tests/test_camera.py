@@ -347,7 +347,7 @@ async def test_webrtc_is_restored_when_camera_becomes_available(
             runtime = cast(MyQRuntimeData, entry.runtime_data)
 
             def source_url() -> str:
-                runtime.coordinator.async_keypad_changed()
+                runtime.coordinator.async_update_listeners()
                 return "http://127.0.0.1:1234/test.h264"
 
             live.source_url.side_effect = source_url

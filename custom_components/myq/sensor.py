@@ -134,7 +134,9 @@ class KeypadSnapshotTime(CoordinatorEntity[MyQDataUpdateCoordinator], SensorEnti
         await super().async_added_to_hass()
         self.async_on_remove(
             async_dispatcher_connect(
-                self.hass, self.coordinator.snapshot_signal(self._serial), self.async_write_ha_state
+                self.hass,
+                self.coordinator.keypad_diagnostics.snapshot_signal(self._serial),
+                self.async_write_ha_state,
             )
         )
 
@@ -144,7 +146,7 @@ class KeypadSnapshotTime(CoordinatorEntity[MyQDataUpdateCoordinator], SensorEnti
     @property
     def native_value(self) -> datetime | None:
         """Return the capture time published with the cached JPEG."""
-        return self.coordinator.keypad_snapshot_times.get(self._serial)
+        return self.coordinator.keypad_diagnostics.snapshot_time(self._serial)
 
     @property
     def available(self) -> bool:

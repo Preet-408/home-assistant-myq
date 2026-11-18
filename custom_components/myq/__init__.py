@@ -49,7 +49,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: MyQConfigEntry) -> bool:
         )
 
         if coordinator is not None:
-            coordinator.async_keypad_token_refreshed()
+            coordinator.keypad_diagnostics.async_token_refreshed()
 
     try:
         token_data = cast(Mapping[str, object], data[CONF_TOKENS])
@@ -61,7 +61,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: MyQConfigEntry) -> bool:
         client = MyQClient(async_get_clientsession(hass), auth)
         coordinator = MyQDataUpdateCoordinator(hass, entry, client)
         await coordinator.async_config_entry_first_refresh()
-        await coordinator.async_load_keypad_state()
+        await coordinator.keypad_diagnostics.async_load()
     except MyQAuthenticationError as error:
         raise ConfigEntryAuthFailed(
             translation_domain=DOMAIN,

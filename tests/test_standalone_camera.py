@@ -137,7 +137,7 @@ async def test_setup_preserves_devices_and_updates_cameras_without_extra_polling
         )
     coordinator = cast(MyQRuntimeData, entry.runtime_data).coordinator
     updated_at = datetime.now(UTC)
-    coordinator.async_set_keypad_snapshot_time(SECOND.serial_number, updated_at)
+    coordinator.keypad_diagnostics.async_set_snapshot_time(SECOND.serial_number, updated_at)
     await hass.async_block_till_done()
     assert timestamp_id is not None
     updated = hass.states.get(timestamp_id)
