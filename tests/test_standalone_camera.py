@@ -95,7 +95,7 @@ async def test_setup_preserves_devices_and_updates_cameras_without_extra_polling
         stored = KeypadPreview(hass, FIRST.serial_number)
         with patch.object(stored, "_decode", return_value=IMAGE):
             stored.received(b"synthetic-frame")
-            await stored.save()
+            await stored.close()
         restored_at = stored.captured_at
     client = MagicMock()
     doors = (DOOR,) if with_door else ()

@@ -9,6 +9,7 @@ import math
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
+from time import monotonic
 
 from homeassistant.components.ffmpeg import get_ffmpeg_manager
 from homeassistant.core import HomeAssistant
@@ -16,6 +17,8 @@ from homeassistant.helpers.storage import Store
 from homeassistant.setup import async_setup_component
 
 _MAX_FRAME = 3_000_000
+_CONVERSION_INTERVAL = 30.0
+_SAVE_DELAY = 30
 
 
 class KeypadPreview:
@@ -31,6 +34,9 @@ class KeypadPreview:
         self._on_update = on_update
         self._pending: tuple[bytes, float] | None = None
         self._conversion: asyncio.Task[None] | None = None
+        self._conversion_timer: asyncio.TimerHandle | None = None
+        self._next_conversion_at = 0.0
+        self._closed = False
         self._frame_at: float | None = None
         self._image: bytes | None = None
 
@@ -41,25 +47,47 @@ class KeypadPreview:
 
     def received(self, frame: bytes) -> None:
         """Queue a bounded live keyframe for shared local conversion."""
-        if not frame or len(frame) > _MAX_FRAME:
+        if self._closed or not frame or len(frame) > _MAX_FRAME:
             return
         self._pending = (frame, time.time())
-        if self._conversion is None or self._conversion.done():
-            self._conversion = self.hass.async_create_task(self._convert_pending())
+        self._schedule_conversion()
+
+    def _schedule_conversion(self) -> None:
+        if (
+            self._closed
+            or self._pending is None
+            or self._conversion_timer is not None
+            or (self._conversion is not None and not self._conversion.done())
+        ):
+            return
+        delay = self._next_conversion_at - monotonic()
+        if delay > 0:
+            self._conversion_timer = self.hass.loop.call_later(delay, self._start_conversion)
+        else:
+            self._start_conversion()
+
+    def _start_conversion(self) -> None:
+        self._conversion_timer = None
+        self._conversion = self.hass.async_create_task(self._convert_pending())
 
     async def _convert_pending(self) -> None:
-        while self._pending is not None:
-            frame, at = self._pending
-            self._pending = None
+        assert self._pending is not None
+        frame, at = self._pending
+        self._pending = None
+        self._next_conversion_at = monotonic() + _CONVERSION_INTERVAL
+        try:
             try:
                 image = await self._decode(frame)
             except OSError, TimeoutError:
-                continue
+                return
             if image is not None:
                 self._image, self._frame_at = image, at
-                self._store.async_delay_save(self._data, 30)
+                self._store.async_delay_save(self._data, _SAVE_DELAY)
                 if self._on_update:
                     self._on_update()
+        finally:
+            self._conversion = None
+            self._schedule_conversion()
 
     def _data(self) -> dict[str, str | float]:
         if self._image is None or self._frame_at is None:
@@ -98,10 +126,16 @@ class KeypadPreview:
         if image is not None:
             self._image, self._frame_at = image, float(at)
 
-    async def save(self) -> None:
-        """Finish pending conversion and persist the last valid preview."""
+    async def close(self) -> None:
+        """Stop sampling and persist the newest pending frame before removal."""
+        self._closed = True
+        if self._conversion_timer is not None:
+            self._conversion_timer.cancel()
+            self._conversion_timer = None
         if self._conversion is not None:
             await self._conversion
+        if self._pending is not None:
+            await self._convert_pending()
         if self._image is not None:
             await self._store.async_save(self._data())
 

@@ -244,7 +244,7 @@ class MyQCameraEntity(CoordinatorEntity[MyQDataUpdateCoordinator], Camera):
         finally:
             try:
                 if self._preview is not None:
-                    await self._preview.save()
+                    await self._preview.close()
             finally:
                 self._live_stream = None
                 if self.stream is not None:
