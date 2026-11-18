@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from time import monotonic
-from typing import cast
+from typing import Literal, cast
+from urllib.parse import quote
 
 from aiohttp import ClientSession
 
@@ -15,15 +16,17 @@ from .const import (
     BRAND_ID,
     DEVICES_BASE_URL,
     GARAGE_DEVICES_BASE_URL,
+    LIGHT_DEVICES_BASE_URL,
     TEND_API_BASE_URL,
     TEND_LOCALE,
     TEND_PARTNER_ID,
     USER_AGENT,
 )
+from .discovery import parse_garage_door, parse_light
 from .exceptions import MyQApiError, MyQAuthenticationError
 from .keypad_state import KeypadPower
 from .keypad_wake import async_wake_keypad
-from .models import GarageDoor, MyQAccount, MyQCamera, MyQDevices
+from .models import GarageDoor, MyQAccount, MyQCamera, MyQDevices, MyQLight
 from .oauth import MyQAuth
 from .request_limits import RequestCooldown
 
@@ -108,7 +111,7 @@ class MyQClient:
         return tuple(accounts)
 
     async def async_get_devices(self) -> MyQDevices:
-        """Discover doors and cameras together without retaining a partial result."""
+        """Discover supported devices together without retaining a partial result."""
         accounts = await self.async_get_accounts()
         groups = await asyncio.gather(
             *(self._async_get_account_devices(account) for account in accounts)
@@ -117,6 +120,7 @@ class MyQClient:
         return MyQDevices(
             doors=tuple(door for group in groups for door in group.doors),
             cameras=tuple(cameras.values()),
+            lights=tuple(light for group in groups for light in group.lights),
         )
 
     async def async_open_door(self, door: GarageDoor) -> None:
@@ -126,6 +130,21 @@ class MyQClient:
     async def async_close_door(self, door: GarageDoor) -> None:
         """Request closing for the door in its owning account."""
         await self._async_command(door, "close")
+
+    async def async_turn_on_light(self, light: MyQLight) -> None:
+        """Turn on a standalone light control in its owning account."""
+        await self._async_light_command(light, "on")
+
+    async def async_turn_off_light(self, light: MyQLight) -> None:
+        """Turn off a standalone light control in its owning account."""
+        await self._async_light_command(light, "off")
+
+    async def _async_light_command(self, light: MyQLight, command: Literal["on", "off"]) -> None:
+        url = (
+            f"{LIGHT_DEVICES_BASE_URL}/api/v6.0/accounts/{quote(light.account_id, safe='')}/"
+            f"lamps/{quote(light.serial_number, safe='')}/{command}"
+        )
+        await self._async_request("PUT", url)
 
     async def async_get_camera_image(self, camera: MyQCamera) -> bytes:
         """Return the latest JPEG image supplied by Tend."""
@@ -181,6 +200,7 @@ class MyQClient:
 
         door_items: list[dict[str, object]] = []
         cameras: dict[str, MyQCamera] = {}
+        lights: list[MyQLight] = []
         for raw_item in raw_items:
             if not isinstance(raw_item, dict):
                 raise MyQApiError("MyQ returned an invalid device")
@@ -188,6 +208,8 @@ class MyQClient:
             match item.get("device_family"):
                 case "garagedoor":
                     door_items.append(item)
+                case "lamp":
+                    lights.append(parse_light(account.account_id, item))
                 case "camera":
                     serial_number = item.get("serial_number")
                     if isinstance(serial_number, str) and serial_number:
@@ -200,8 +222,11 @@ class MyQClient:
                             name if isinstance(name, str) else None,
                         )
         return MyQDevices(
-            doors=tuple(_garage_door(account.account_id, item, cameras) for item in door_items),
+            doors=tuple(
+                parse_garage_door(account.account_id, item, cameras) for item in door_items
+            ),
             cameras=tuple(cameras.values()),
+            lights=tuple(lights),
         )
 
     async def _async_command(self, door: GarageDoor, command: str) -> None:
@@ -288,73 +313,6 @@ def _online(raw_state: object) -> bool | None:
         return None
     online = cast(dict[str, object], raw_state).get("online")
     return online if isinstance(online, bool) else None
-
-
-def _garage_door(
-    account_id: str,
-    item: Mapping[str, object],
-    cameras: Mapping[str, MyQCamera],
-) -> GarageDoor:
-    serial_number = item.get("serial_number")
-    name = item.get("name")
-    model = item.get("device_model")
-    raw_state = item.get("state")
-    if not isinstance(serial_number, str):
-        raise MyQApiError("MyQ returned a garage door without a serial number")
-    if raw_state is not None and not isinstance(raw_state, dict):
-        raise MyQApiError("MyQ returned an invalid garage door state")
-    state = cast(dict[str, object], raw_state or {})
-    door_state = state.get("door_state")
-    online = state.get("online")
-    battery_backup_state = state.get("battery_backup_state")
-    in_vacation_mode = state.get("in_vacation_mode")
-    attached_worklight_on = state.get("attached_worklight_on")
-    raw_fault_codes = state.get("active_fault_codes")
-    absolute_cycle_count = state.get("absolute_cycle_count")
-    service_cycle_count = state.get("service_cycle_count")
-    last_device_activation_source = state.get("last_device_activation_source")
-    camera_serial_number = state.get("attached_camera_serial_number")
-    fault_codes = (
-        tuple(code for code in raw_fault_codes if isinstance(code, str))
-        if isinstance(raw_fault_codes, list)
-        else ()
-    )
-    return GarageDoor(
-        account_id=account_id,
-        serial_number=serial_number,
-        name=name if isinstance(name, str) else serial_number,
-        device_model=model if isinstance(model, str) else None,
-        door_state=door_state if isinstance(door_state, str) else None,
-        online=online if isinstance(online, bool) else None,
-        battery_backup_state=(
-            battery_backup_state if isinstance(battery_backup_state, str) else None
-        ),
-        in_vacation_mode=(in_vacation_mode if isinstance(in_vacation_mode, bool) else None),
-        attached_worklight_on=(
-            attached_worklight_on if isinstance(attached_worklight_on, bool) else None
-        ),
-        active_fault_codes=fault_codes,
-        absolute_cycle_count=(
-            absolute_cycle_count
-            if isinstance(absolute_cycle_count, int) and not isinstance(absolute_cycle_count, bool)
-            else None
-        ),
-        service_cycle_count=(
-            service_cycle_count
-            if isinstance(service_cycle_count, int) and not isinstance(service_cycle_count, bool)
-            else None
-        ),
-        last_device_activation_source=(
-            last_device_activation_source
-            if isinstance(last_device_activation_source, str)
-            else None
-        ),
-        camera=(
-            cameras.get(camera_serial_number, MyQCamera(camera_serial_number))
-            if isinstance(camera_serial_number, str) and camera_serial_number
-            else None
-        ),
-    )
 
 
 def _api_headers(access_token: str) -> dict[str, str]:
