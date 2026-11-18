@@ -2,6 +2,16 @@
 
 <!-- version list -->
 
+## v0.2.17 (2026-11-18)
+
+Reduce camera overhead and separate keypad diagnostics
+
+- Limit passive preview decoding while preserving the latest frame
+- Share failed camera preparation cooldowns across viewers
+- Separate keypad diagnostics and cache lifecycle from device polling
+- Add regression coverage for throttling, retries and cleanup
+
+
 ## v0.2.16 (2026-11-18)
 
 Add light controls and improve Video Keypad support
