@@ -12,6 +12,7 @@
 
 ## 2026-11-19 — MYQ-001
 - Did: Fork created; sanitized research and installation plan prepared. Offline checks pass: 472 tests, Ruff lint/format and mypy (70 source files). Independent review by gpt-6.1-sol; Claude CLI was not signed in.
-- PR: pending.
+- PR: https://github.com/Preet-408/home-assistant-myq/pull/1 (draft, independently reviewed).
+- GitHub CI: no check runs reported when the PR was created; results above are local checks.
 - Left: Physical discovery, cloud login, stream negotiation and battery interpretation unverified.
 - Preet must: Merge/deploy; no live HA changes have been made by this task.
