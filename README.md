@@ -1,3 +1,8 @@
+> **Preet's household fork** of [bvdcode/home-assistant-myq](https://github.com/bvdcode/home-assistant-myq).
+> Start with [our HA setup guide](docs/HA-SETUP.md) and [APK findings](docs/APK-REVIEW.md).
+> Runtime behavior is unchanged from the baseline in [STATE.md](STATE.md).
+> The upstream HACS links below target upstream, not this fork; this fork has no release assets yet.
+
 # MyQ for Home Assistant
 
 [![CI](https://github.com/bvdcode/home-assistant-myq/actions/workflows/ci.yml/badge.svg)](https://github.com/bvdcode/home-assistant-myq/actions/workflows/ci.yml)
