@@ -6,12 +6,13 @@
     "stream"
   ],
   "codeowners": [
-    "@bvdcode"
+    "@bvdcode",
+    "@Preet-408"
   ],
   "config_flow": true,
-  "documentation": "https://github.com/bvdcode/home-assistant-myq",
+  "documentation": "https://github.com/Preet-408/home-assistant-myq",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/bvdcode/home-assistant-myq/issues",
+  "issue_tracker": "https://github.com/Preet-408/home-assistant-myq/issues",
   "version": "0.2.17"
 }
